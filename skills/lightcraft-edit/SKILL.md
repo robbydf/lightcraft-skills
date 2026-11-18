@@ -208,9 +208,16 @@ than the background (Subject lift).
   change is subtle: face R−B drops by only about 1 point.
 - **Black or navy clothing** turns grey under the mask (it rises more than 50 %): set mask `shadows`
   to 5.
-- **Adjusting the lift:** step the mask exposure by 0.1 from the start value toward the target.
-  - Above 0.85, raise mask `shadows` (up to `lift.shadows_above_0_85`, default 40) before adding more
-    exposure, because very dark faces respond better to shadows.
+- **Adjusting the lift on a dark face** (night, or a face under 60): **shadows first.**
+  - Raise mask `shadows` from 15 in steps of about 8, up to `lift.shadows_max` (default 40), at the
+    current exposure.
+  - Only when shadows reach that maximum and the face is still short of the target, step the mask
+    exposure up by 0.1.
+  - Stop shadows early if one face overshoots: on one photo, 40 gave +25 % where "a bit more" was
+    asked, so 28 was kept.
+  - In testing, shadows 32–40 alone lifted faces 10–15 % on three night portraits. On the darkest
+    faces, shadows 40 plus more exposure lifted them 60–95 %. The user approved all of them.
+  - On a bright face (60 or more), step the mask exposure by 0.1 instead.
   - The hard limit is `lift.mask_limit` (default **1.6**); never 2 or above.
   - At each step, check at 100 % for halos at the mask edge and for noise or blotches on the face.
     Stop at the last clean step and report which limit stopped you.

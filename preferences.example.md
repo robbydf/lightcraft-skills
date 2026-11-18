@@ -72,7 +72,7 @@ for `mask.adjust`.
 - `lift.mask.night`: `{"exposure":0.30,"shadows":15,"temp":0}` (start value), approved: false
 - `lift.warm_skin_temp`: -4
 - `lift.mask_limit`: 1.6 (never 2 or above)
-- `lift.shadows_above_0_85`: up to 40
+- `lift.shadows_max`: 40 (dark faces: raise mask shadows to this first, then exposure)
 
 ## Edit: local masks
 
