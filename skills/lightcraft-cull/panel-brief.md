@@ -15,7 +15,11 @@ LightCraft or its CLI. Some frames may come from the same burst. Judge each fram
 - Soft but readable is fine: a face that is slightly soft but shows no visible blur at 100 % stays a pick.
 - **Drop** a photo if any of these is visible on a person who is a main subject (large in the frame, or clearly
   the point of the photo):
-  - **Not looking at the camera:** a main person looks away, down or sideways, or the face is turned away.
+  - **Not looking at the camera, in a posed photo only:** people stopped and face the camera (a portrait or
+    group photo), and a main person looks away, down or sideways, or the face is turned away.
+    In a **candid** photo (people doing something: ordering at a shop, watching an attraction, a child reacting
+    to something), looking away is **not** a fault; judge eyes, blur and expression only. A face turned fully
+    away is still a drop. If you can't tell posed from candid, say so in the reason.
   - **Eyes:** closed, half-closed, rolled up (eye whites showing above or below the iris), or oddly turned.
   - **Visible blur:** the face or main subject shows blur, shake or motion smear at 100 % while
     something else is sharp.

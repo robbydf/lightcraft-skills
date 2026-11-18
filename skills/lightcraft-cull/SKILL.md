@@ -49,7 +49,7 @@ follow `record_shots` (default: unmarked).
 |---|---|---|
 | **Pick** | The best frame of a burst. A single photo that passes the reject test **and the moment test** (below). Bursts over 10 frames: one pick per distinct framing or moment. Two near-equal frames: both. | `photo.rate rating=3` |
 | **Reject** | Passes the reject test below, whether in a burst or a single | `photo.flag flag=reject` |
-| **Unmarked** | Usable but not a pick: weaker moment, a main person not looking at the camera, odd eyes, visible blur on a face at 100 %, an unflattering face, or **any doubt** (including eyes that may be closed). Closed eyes are a reject: see (d). Also **plain or record shots** (maps, signs, info boards, menus, timetables, tickets, shots taken only to remember a detail), even when sharp | nothing (list doubts as `unsure`; log record shots with reason "record shot") |
+| **Unmarked** | Usable but not a pick: weaker moment, a main person not looking at the camera in a posed photo, odd eyes, visible blur on a face at 100 %, an unflattering face, or **any doubt** (including eyes that may be closed). Closed eyes are a reject: see (d). Also **plain or record shots** (maps, signs, info boards, menus, timetables, tickets, shots taken only to remember a detail), even when sharp | nothing (list doubts as `unsure`; log record shots with reason "record shot") |
 
 **Never:**
 - Delete anything, or use the `pick` flag.
@@ -117,11 +117,19 @@ Input: group lines from `bursts.py` such as
    - Bursts over 8 frames: split them into runs of similar framing and handle each run separately.
    - A single that looks fine at 640 px is a **pick** only if it also passes the **moment test** and the
      **face check** (`pick.moment_test`, `pick.face_check`; skip a check that is `false`):
-     - **Moment test:** when people are the subject, **every** main person looks at the camera, and
-       no face is turned away or hidden (by a hand, an arm, another person or an object). If any main
-       person looks away, down or sideways, or has their face hidden, the single
-       stays **unmarked**, even when someone else looks at the camera. Log it as `unsure`, reason
-       "moment: <what>". In testing, the user dropped every such single the cull had picked.
+     - **Moment test:** first decide whether the single is **posed** or **candid**.
+       - **Posed** (people stopped and face the camera, framed as a portrait or group photo): **every**
+         main person looks at the camera, and no face is turned away or hidden (by a hand, an arm,
+         another person or an object). If any main person looks away, down or sideways, or has their
+         face hidden, the single stays **unmarked**, even when someone else looks at the camera. Log it
+         as `unsure`, reason "moment: <what>". In testing, the user dropped every such single.
+       - **Candid** (people caught doing something: ordering at a shop, watching an attraction or a
+         character, a child reacting to something): looking away is fine, and the single is a pick
+         if the face check passes. A face turned fully away still counts as hidden. In testing, the
+         user kept all three candid singles the moment test had dropped (ordering at a shop, a boy
+         looking at a statue, a toddler looking up).
+       - **Not clear which:** unmarked `unsure`, reason "moment: posed or candid?", so it reaches the
+         user's review list.
      - **Face check: always on a 100 % crop**, never on the 640 px view alone. Export the single at
        2000 px and crop every main face (region ≤ 0.15 × 0.15). It stays **unmarked** `unsure` if a main
        person shows:
@@ -238,7 +246,7 @@ a time, and checks their results.
 
        The 3 roles:
        - **technical:** focus and blur, whether the subject is sharp at 100 %;
-       - **people:** expression and how flattering the face is, and whether everyone looks at the camera;
+       - **people:** expression and how flattering the face is, and, in posed photos, whether everyone looks at the camera;
        - **eyes:** a tight crop of every main face, checking open, half-closed or rolled eyes, eye
          whites showing, and the gaze.
     3. **Votes:**
@@ -255,6 +263,9 @@ a time, and checks their results.
     - The cull alone matched 13: it left three soft-but-readable frames unmarked that the user kept.
     - The panel's 2 misses were "not looking at the camera", which wasn't in its brief then; that rule
       has since been added.
+    - Second trial day (30 photos): the panel matched the user on 27. All 3 misses were candid
+      singles dropped for "not looking at the camera" (one 3–0, two 2–1); the posed/candid split was
+      added to the brief after that.
 
     **Trial** (`panel: trial`): show the user the panel's changes for the first `panel.trial_days` days
     before applying them without asking. Keep it at 3 reviewers unless misses turn out to be random rather than one rule missing

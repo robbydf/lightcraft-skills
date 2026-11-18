@@ -19,7 +19,7 @@ for `mask.adjust`.
 - `reject.exposure`: subject mean below 5 or above 250 on an unedited render
 - `reject.light_smear`: ask (a frame of pure light streaks with no subject: `reject`, `unmarked`, or `ask` = put it on the review list)
 - `reject.closed_eyes`: true (a main person's lids cover the pupils)
-- `pick.moment_test`: true (people photos: every main person looks at the camera, with no face hidden or turned away; otherwise unmarked)
+- `pick.moment_test`: true (posed people photos: every main person looks at the camera, with no face hidden or turned away; otherwise unmarked. Candid shots of people doing something may look away)
 - `pick.face_check`: true (singles: a 100 % face crop; odd eyes, visible blur or an unflattering face mean unmarked)
 - `pick.soft_but_readable`: pick (slightly soft, no visible blur at 100 %)
 - `record_shots`: unmarked (maps, signs, menus, timetables, tickets)
