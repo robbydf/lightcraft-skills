@@ -6,7 +6,7 @@
 param([string]$Dir = "")
 $ErrorActionPreference = "SilentlyContinue"
 
-function Test-Dir([string]$d) { $d -and (Test-Path (Join-Path $d "lightcraft-cli.exe")) }
+function Test-Dir([string]$d) { $d -and (Test-Path -LiteralPath (Join-Path $d "lightcraft-cli.exe")) }
 
 $home2 = if ($env:LIGHTCRAFT_HOME) { $env:LIGHTCRAFT_HOME } else { Join-Path $env:USERPROFILE ".claude\lightcraft" }
 $fromConfig = ""
@@ -23,7 +23,7 @@ foreach ($root in @("HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
                     "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall",
                     "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall")) {
     Get-ChildItem $root | ForEach-Object {
-        $p = Get-ItemProperty $_.PSPath
+        $p = Get-ItemProperty -LiteralPath $_.PSPath
         if ($p.DisplayName -match 'LightCraft|ArtCraft') {
             $candidates += $p.InstallLocation
             if ($p.DisplayIcon) { $candidates += (Split-Path ($p.DisplayIcon -replace '"|,\d+$', '')) }
@@ -39,9 +39,10 @@ foreach ($base in @($env:ProgramFiles, ${env:ProgramFiles(x86)}, (Join-Path $env
 }
 
 foreach ($c in $candidates) {
-    if (Test-Dir $c) { (Resolve-Path $c).Path; exit 0 }
-    if ($c -and (Test-Path $c)) {
-        $hit = Get-ChildItem $c -Recurse -Depth 2 -Filter lightcraft-cli.exe | Select-Object -First 1
+    if (Test-Dir $c) { (Resolve-Path -LiteralPath $c).Path; exit 0 }
+    # Search one level deeper only inside a LightCraft/ArtCraft folder, never a drive root or Program Files itself.
+    if ($c -and (Test-Path -LiteralPath $c) -and ((Split-Path -Leaf $c) -match 'LightCraft|ArtCraft')) {
+        $hit = Get-ChildItem -LiteralPath $c -Recurse -Depth 2 -Filter lightcraft-cli.exe | Select-Object -First 1
         if ($hit) { $hit.DirectoryName; exit 0 }
     }
 }

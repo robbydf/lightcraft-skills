@@ -19,7 +19,7 @@ with `runstate.py picks`.
 - Run CLI commands **from Bash**. Windows PowerShell 5.1 strips the `"` inside JSON arguments.
   Shell variables don't persist between tool calls, so start every Bash call with:
   ```bash
-  source "<base>/../../scripts/lc-env.sh"   # <base> = this skill's base directory; sets CLI, LC_SCRIPTS, RUNS, PREFS, M
+  source "<base>/../../scripts/lc-env.sh"   # <base> = this skill's base directory, written with forward slashes (C:/Users/...); sets CLI, LC_SCRIPTS, RUNS, PREFS, M
   RUN="$RUNS/<library name>"   # durable; one per library, named by the user (LightCraft does not report a name)
   SP="<session scratchpad>/cull"; mkdir -p "$SP"               # throwaway renders; never next to originals
   ```
@@ -40,8 +40,10 @@ with `runstate.py picks`.
 
 ## Rules (from the preferences file)
 
-The marks and thresholds are `pick.mark`, `reject.mark`, `burst.gap_seconds`, `reject.sharp_ratio`
-and `reject.cap_percent` in the preferences. The defaults are shown here.
+The marks are fixed: a pick is 3 stars and a reject is the reject flag. `runstate.py` checks and rolls
+back exactly these marks. The thresholds are `burst.gap_seconds`, `reject.sharp_ratio`,
+`reject.cap_percent` and `reject.exposure` in the preferences; the defaults are shown here. Record shots
+follow `record_shots` (default: unmarked).
 
 | Outcome | When | Mark (always with explicit `ids`) |
 |---|---|---|
@@ -64,13 +66,14 @@ and `reject.cap_percent` in the preferences. The defaults are shown here.
 **Reject test.** Reject only if (a), (c) or (d) holds:
 - **(a) Visible fault.** Export at 2000 px and Read a 100 % crop of the subject (region ≤ 0.3 × 0.3).
   It must show doubled edges or streaks (shake), or nothing in the frame in focus. Alternatively, the
-  640 px view shows an accidental frame: no subject, the floor, or a lens cap. (Open question for the
-  user: whether a blown-out smear with no subject, such as a frame of pure light streaks, counts. Until they decide,
-  list such rejects on the review list.)
+  640 px view shows an accidental frame: no subject, the floor, or a lens cap. A blown-out smear
+  with no subject, such as a frame of pure light streaks, follows `reject.light_smear`:
+  `reject` treats it as a visible-fault reject, `unmarked` leaves it unmarked, and `ask` (or a missing
+  key) leaves it unmarked and puts it on the review list.
 - **(b) Bursts only, extra condition.** On top of (a), the frame's `sharp` must be below 0.6 × the
   burst's best, using the same subject region. Below 0.6 only means "look at the crop": the crop
   decides. Soft-but-readable frames (faces readable, no streaks) are unmarked `unsure`, not rejects.
-- **(c) Exposure.** `M mean` on the subject is above 250 or below 5 on an unedited render. Anything
+- **(c) Exposure** (`reject.exposure`, default below 5 or above 250). `M mean` on the subject is outside it on an unedited render. Anything
   else is recoverable, so it is not a reject.
 - **(d) Closed eyes (`reject.closed_eyes`).** A main person's eyes are closed: the lids cover
   the pupils (a blink, or mid-blink). Bursts and singles alike.
@@ -84,7 +87,7 @@ and `reject.cap_percent` in the preferences. The defaults are shown here.
     best frame stays unmarked `unsure` instead of being rejected, so a burst never ends with nothing.
 - **Singles** are never rejected on a number alone. Treat motion blur that may be intentional (light
   trails, panning, night crowds) as not a reject.
-- **Cap:** if rejects exceed 15 % of a chunk, stop and show the user before marking.
+- **Cap** (`reject.cap_percent`, default 15 %): if rejects exceed it in a chunk, stop and show the user before marking.
 
 **Reference result (a 1450-frame travel library):** 761 picks, 20 rejects (1.4 %), 117 unsure;
 no chunk came near the 15 % cap. Score traps seen: night and fireworks frames score low but are fine
@@ -188,7 +191,9 @@ a time, and checks their results.
      `python -I "$LC_SCRIPTS/runstate.py" init "$RUN" "$SP/photos.json"`. This happens once per run; `init`
      refuses to overwrite.
    - Show the user the `protected` list and the plan, and confirm they want subagents used.
-2. **Chunks:** `python -I "$LC_SCRIPTS/bursts.py" "$SP/photos.json" --log "$RUN/log.jsonl" --chunks --out "$SP" > "$SP/chunks.jsonl"`.
+2. **Chunks:** `python -I "$LC_SCRIPTS/bursts.py" "$SP/photos.json" --gap <burst.gap_seconds> --log "$RUN/log.jsonl" --chunks --out "$SP" > "$SP/chunks.jsonl"`.
+   - Use the same `--gap` for the whole run: changing it regroups the photos, and logged groups no
+     longer match.
    - Each chunk has at most 25 groups or 120 frames, and a chunk never crosses a day.
    - A tail of ≤ 6 frames is folded into the previous chunk.
    - `--out` writes `$SP/chunkN.txt` for the workers. Numbers change on every regeneration, so
@@ -206,7 +211,7 @@ a time, and checks their results.
    Run it in the background, and check each chunk before starting the next.
 5. **After each chunk:**
    - Re-query the catalog and run `runstate.py check "$RUN" "$SP/photos-now.json"`.
-   - Stop on any `MISMATCH`, on rejects over 15 %, or on a "drew no frame" error.
+   - Stop on any `MISMATCH`, on rejects over `reject.cap_percent`, or on a "drew no frame" error.
    - Report any `USER-CHANGE` to the user.
    - Delete `<SP>/wN`. Collect each borderline call the worker reports for the final review list:
      a reject on sight or on exposure, a streaked frame left unsure, or a soft pick.
@@ -255,7 +260,7 @@ a time, and checks their results.
 7. **Resume** in any session: re-export `photos.json` and rerun step 2. Logged groups are skipped.
    - If a worker was stopped mid-chunk, run `check` first. A `USER-CHANGE` on that chunk's ids means
      a group was marked but not logged: undo those marks or log the group before continuing.
-8. **At the end:** run a full `check`, then confirm `bursts.py --log … --chunks` reports 0 groups
+8. **At the end:** run a full `check`, then confirm `bursts.py --gap … --log … --chunks` reports 0 groups
    remaining. Show the totals per day, the rejects and the review list.
 9. **Undo:** `runstate.py rollback "$RUN" [--day D]` prints the commands that remove only this run's
    marks. Show them to the user before running them.

@@ -103,9 +103,9 @@ if ($Action -eq "start") {
 # ---- stop ----
 $problems = 0
 
-# 1. Disconnect Claude Code: remove the registration from every scope that has it
+# 1. Disconnect Claude Code: remove the registration from the local and user scopes (never a project's .mcp.json)
 $removed = @()
-foreach ($s in @("local", "user", "project")) {
+foreach ($s in @("local", "user")) {
     cmd /c "claude mcp remove $name -s $s >nul 2>nul"
     if ($LASTEXITCODE -eq 0) { $removed += $s }
 }

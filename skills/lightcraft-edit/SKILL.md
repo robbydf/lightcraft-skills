@@ -1,6 +1,6 @@
 ---
 name: lightcraft-edit
-description: Use when the user asks to edit, develop, retouch or adjust photos in LightCraft (ArtCraft), e.g. "edit the picks from June 14", "brighten my son", "the subject is too dark", "fix the exposure", "straighten this building", "denoise this", or "apply my night look".
+description: Use when the user asks to edit, develop, retouch or adjust photos in LightCraft (ArtCraft), e.g. "edit the picks from June 14", "brighten the person on the left", "the subject is too dark", "fix the exposure", "straighten this building", "denoise this", or "apply my night look".
 ---
 
 # lightcraft-edit
@@ -16,7 +16,7 @@ Edit only the photos the user names, or a scene type they approved for a batch. 
 - Run CLI commands **from Bash**: Windows PowerShell 5.1 strips the `"` inside JSON arguments.
   Variables don't persist between calls, so start every Bash call with:
   ```bash
-  source "<base>/../../scripts/lc-env.sh"   # <base> = this skill's base directory; sets CLI, LC_SCRIPTS, RUNS, PREFS, M, PSX
+  source "<base>/../../scripts/lc-env.sh"   # <base> = this skill's base directory, written with forward slashes (C:/Users/...); sets CLI, LC_SCRIPTS, RUNS, PREFS, M, PSX
   RUN="$RUNS/<library name>"   # the cull run's folder; ask the user if unsure
   SP="<session scratchpad>/edit"; mkdir -p "$SP"
   ```
@@ -99,7 +99,7 @@ same name can be read back stale.
    (see Looks).
 4. **Subject lift**, only if measured darker (see Subject lift). Then any **local fixes** (see Local
    masks: signs, food, details).
-5. **AI Denoise**, if ISO 3200 or above and grain shows at 100 % (see AI Denoise).
+5. **AI Denoise**, if ISO `denoise.iso_candidate` (default 3200) or above and grain shows at 100 % (see AI Denoise).
 6. **Clipping check** (see Clipping check).
 7. **After render:** export at 1000 px and Read it.
 
@@ -121,7 +121,8 @@ the preferences file:
   - The exception is a venue the user asked to leave unedited.
 
 **Before using a look,** check that it is `approved: true`. If not, show one sample and wait for
-approval (see New looks).
+approval (see New looks). The `lift.mask.*` values have the same gate: if one isn't approved, show the
+first masked photo of that kind and wait before masking the rest.
 
 **Daylight adjustments:**
 - **Flat or overcast frame:** dehaze 6.
@@ -171,7 +172,7 @@ than the background (Subject lift).
   - In testing, the user asked for more lift on night faces in three review rounds. Faces at about
     55 % of the background were still too dark, and 70–77 % was accepted.
   - Faces that are near-silhouettes (under 20) may need the mask at its limit. Report what you reached.
-- The user's wish is a face at least as bright as the background. Report the face/background ratio.
+- The goal is a face at least as bright as the background. Report the face/background ratio.
 
 **Measure** on a render with the look applied and no mask. Report each box's region.
 - **Face:** a box on the forehead and cheeks.
@@ -363,7 +364,7 @@ nearby texture.
 
 ## AI Denoise (high ISO)
 
-The user's rule: ISO 3200 or above makes a photo a **candidate**. Judge each candidate on 100 % crops.
+ISO `denoise.iso_candidate` (default 3200) or above makes a photo a **candidate**. Judge each candidate on 100 % crops.
 
 1. **Find the grain.** Export the candidate at full size (see Gotchas: 1–2 per call). Crop a mid-tone
    area: sky, a wall, or skin. Name the crop region in the report.
@@ -375,7 +376,7 @@ The user's rule: ISO 3200 or above makes a photo a **candidate**. Judge each can
      10 and `detail.nrColor` to 15. Stacking it with the night look's 35 made the skin waxy and the
      background painterly on a night portrait.
    - On a masked night face that still shows fine speckle at 100 %, use `detail.nrLuminance` 20.
-4. **Choose the amount by the crop:** the lowest of 50, 65 and 75 % that is clean at 100 %.
+4. **Choose the amount by the crop:** the lowest of `denoise.amounts` (default 50, 65 and 75 %) that is clean at 100 %.
    - **Full ladder once per ISO level per run (speed):** render 0/50/65/75 only on the first
      candidate at each ISO level (for example 3200, 4000, 6400) in the whole run, and append
      `{"iso":6400,"amount":65,"id":ID}` to `$RUN/denoise-ladder.jsonl`. Later candidates at that ISO
@@ -448,7 +449,11 @@ Follow `straighten` in the preferences:
 
 Hand the batch to `sonnet` subagents with a brief file, **one chunk of about 20 photos per worker**,
 one worker at a time (LightCraft has one active photo). A worker's context fills up after about 20
-edited photos. Give each chunk its own folder. List in the brief:
+edited photos. Give each chunk its own folder. Subagents aren't told the skill's base directory, so
+list in the brief:
+- this skill's base directory as an absolute path (forward slashes), so the worker can `source` the
+  Setup line, plus `RUN`, its `SP` folder and the preferences path (`$PREFS`), and tell it to read the
+  Setup section first;
 - the ids, and for a redo, that they must be reverted first;
 - which looks are approved, and whether this is a trial batch for proposed looks;
 - the review material and `review.jsonl` (see Showing results);
@@ -473,7 +478,7 @@ edited photos. Give each chunk its own folder. List in the brief:
 
 ## Showing results to the user
 
-**At the computer: a review page** (preferred for any batch). `review.py` in this skill's folder
+**At the computer: a review page** (preferred for any batch). `review.py` in `$LC_SCRIPTS`
 builds one self-contained, responsive HTML page: before/after side by side filling the screen, the
 crops, what changed, and an answer per photo. The user presses "Copy my decisions" and pastes the text
 into the chat; then apply each answer (Approve → mark the look approved in Looks; Revert → see Revert;
@@ -502,7 +507,7 @@ Change → ask what to change if the note doesn't say).
 
 **On a phone:** the user often reviews away from the laptop, where the review page can't be opened. A
 downscaled before/after sheet can't be zoomed, so the user can't judge noise or detail from it.
-- **Standard output, every batch:** the worker makes one `ID-sbs.jpg` per photo with
+- **Standard output, every batch** (unless `review.phone_sbs` is false): the worker makes one `ID-sbs.jpg` per photo with
   `sbs.ps1 -Before ID-before.jpg -After ID-after.jpg -Region <the area that changed> -Out ID-sbs.jpg`
   (whole frame `0,1,0,1` for looks and straightening, the faces for a lift). Send these with the
   file-sending tool, listing the ids in order, and ask for verdicts by id.

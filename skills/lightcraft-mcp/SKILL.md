@@ -6,7 +6,8 @@ description: Use when the user asks to start/launch or stop/shut down LightCraft
 # lightcraft-mcp
 
 Two subcommands, both handled by the plugin's script. The argument after the skill name picks one
-(`/lightcraft-mcp start`, `/lightcraft-mcp stop`). With no argument, ask which.
+(`/lightcraft-mcp start`, `/lightcraft-mcp stop`; installed as a plugin, `/lightcraft:lightcraft-mcp start`).
+With no argument, ask which.
 
 The script is in the plugin's `scripts` folder, two levels above this skill's base directory
 (`<base>/../../scripts/lightcraft-mcp.ps1`). Use the real base directory you were given when this
@@ -43,7 +44,8 @@ they are missing in the current session, tell the user to start a new session.
 
 ## stop
 
-1. Disconnects Claude Code: `claude mcp remove lightcraft` from every scope it is in.
+1. Disconnects Claude Code: `claude mcp remove lightcraft` from the local and user scopes. A
+   project's own `.mcp.json` is left alone.
 2. Stops any running `lightcraft-cli … mcp` bridge processes.
 3. Closes the GUI gracefully (a window close, so the library saves) and waits up to `-TimeoutSec`.
 
@@ -59,15 +61,15 @@ says so.
 | 4 / 5 | start: the CLI or bridge handshake failed | Show the error line. |
 | 6 | start: `claude mcp add` failed | Run it by hand to see the error. |
 | 7 | stop: the GUI is still open (a dialog?) | Ask the user, and re-run `stop -Force` only on their yes. |
-| 8 | stop: the registration is still present | Run `claude mcp list` and remove it by hand. |
+| 8 | stop: the registration is still present | Usually a project's own `.mcp.json` entry, which stop deliberately keeps. Run `claude mcp get lightcraft` to see the scope, and remove it by hand only if the user wants. |
 | 9 | LightCraft not found | Ask for the install folder and save it as `LIGHTCRAFT_DIR=<folder>` in `~/.claude/lightcraft/config.env`. |
 
 ## Token
 
 Tested on LightCraft 0.21.1, which has **no auth** on the control port (127.0.0.1 only), so no token
 is needed.
-- If you have a token file anyway, pass `-TokenFile <file>` or set `LIGHTCRAFT_TOKEN_FILE`. `start`
-  then exports it as `LIGHTCRAFT_TOKEN` for any wrapper.
+- `-TokenFile <file>` or `LIGHTCRAFT_TOKEN_FILE` only sets `LIGHTCRAFT_TOKEN` inside the start
+  script. That's a no-op on 0.21.1, kept for a future version that needs auth.
 - Never print the token.
 - If a newer LightCraft rejects connections for missing auth, look for a new token flag or
   environment variable in `lightcraft.exe --help` and in the `lightcraft-cli.exe` usage (run it with

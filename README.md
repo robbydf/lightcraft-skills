@@ -23,7 +23,9 @@ Or add the marketplace first, then install from it:
 /plugin install lightcraft@lightcraft-skills
 ```
 
-Then, in Claude Code: `/lightcraft-mcp start`.
+Then, in Claude Code, run `/lightcraft:lightcraft-mcp start` (plugin skills are namespaced), or just
+ask Claude to start LightCraft. Copy `preferences.example.md` to `~/.claude/lightcraft/preferences.md`
+first, or let the skills do it on first use.
 
 ## Requirements
 
@@ -56,8 +58,8 @@ Everything personal lives outside the plugin, in `~/.claude/lightcraft/` (or `$L
 `scripts/find-lightcraft.ps1` prints what it finds.
 
 **Token:** LightCraft 0.21.1 has no auth on its control port (127.0.0.1 only), so no token is needed.
-If you use one with a wrapper, pass `-TokenFile` to `lightcraft-mcp.ps1` or set `LIGHTCRAFT_TOKEN_FILE`.
-Never commit it.
+`-TokenFile` / `LIGHTCRAFT_TOKEN_FILE` only sets `LIGHTCRAFT_TOKEN` inside the start script, which is a
+no-op on 0.21.1. It's kept for a future LightCraft that needs auth. Never commit a token.
 
 ## Layout
 

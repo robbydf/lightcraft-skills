@@ -3,8 +3,8 @@
 Copy this file to `~/.claude/lightcraft/preferences.md` (or `$LIGHTCRAFT_HOME/preferences.md`) and
 edit it. The skills read it before culling or editing.
 - If a key is missing, the skill asks you and offers to add your answer here.
-- Values marked `approved: false` are starting points: the skill shows you a sample first, and you
-  approve it before the skill uses that value on a batch.
+- Values marked `approved: false` (the looks and the `lift.mask.*` values) are starting points: the
+  skill shows you a sample first, and you approve it before the skill uses that value on a batch.
 - When you approve a look or a value during a session, the skill updates this file and sets
   `approved: true`.
 
@@ -14,12 +14,10 @@ for `mask.adjust`.
 ## Cull
 
 - `burst.gap_seconds`: 1 (frames this close together form one burst)
-- `pick.mark`: `photo.rate rating=3`
-- `reject.mark`: `photo.flag flag=reject`
-- `unmarked`: nothing (photos that are neither picks nor rejects stay unmarked)
 - `reject.sharp_ratio`: 0.6 (in a burst, a frame below this share of the burst's best sharpness only *triggers* a crop check; the crop decides)
 - `reject.cap_percent`: 15 (stop and ask if rejects pass this share of a chunk)
 - `reject.exposure`: subject mean below 5 or above 250 on an unedited render
+- `reject.light_smear`: ask (a frame of pure light streaks with no subject: `reject`, `unmarked`, or `ask` = put it on the review list)
 - `reject.closed_eyes`: true (a main person's lids cover the pupils)
 - `pick.moment_test`: true (people photos: every main person looks at the camera, with no face hidden or turned away; otherwise unmarked)
 - `pick.face_check`: true (singles: a 100 % face crop; odd eyes, visible blur or an unflattering face mean unmarked)
