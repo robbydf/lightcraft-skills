@@ -8,7 +8,7 @@ renders, and asks you before anything that depends on your taste.
 |---|---|
 | `lightcraft-mcp` | `start`: launch LightCraft with its control port, check the CLI and MCP bridge, and register the `lightcraft` MCP server with Claude Code. `stop`: disconnect and close LightCraft gracefully. |
 | `lightcraft-cull` | Cull a day or a whole library. The best frame of each burst and usable singles get picked, clear failures get the reject flag, and everything else stays unmarked. Big libraries run chunk by chunk in subagents, with an optional 3-reviewer panel for borderline frames. Every mark is logged and can be rolled back. |
-| `lightcraft-edit` | Edit only the photos you name: approved looks per scene type, measured subject lifts with SAM 3 or Auto Mask, local masks (signs, food, details), AI Denoise, and straightening. The output is a review page plus phone-sized before/after images. |
+| `lightcraft-edit` | Edit only the photos you name: approved looks per scene type, measured subject lifts with SAM 3 or Auto Mask, local masks (signs, food, details), opt-in bystander removal, AI Denoise, and straightening. The output is a review page plus phone-sized before/after images. |
 
 ## Install
 

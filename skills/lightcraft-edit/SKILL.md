@@ -327,6 +327,40 @@ clearly met. Make the mask as in Path A, check coverage with the magenta overlay
     and 0.65 gave +16 %.
   - Check that nothing next to it changes.
 
+## Bystander removal (opt-in)
+
+Only when the user asks for it on named photos: for example, strangers in the background of a posed photo.
+LightCraft has no generative removal, only the spot tool (`spot.add`), so the patches are copied from
+nearby texture.
+
+1. **Before you start:** record the history cursor as in "Before the first change to a photo".
+   Export at 2000 px, and get the bystanders' outline from `M grid` around them.
+2. **Use `mode=clone` with an explicit source**, one spot per vertical strip of about 0.02 of the long
+   edge. Each spot's `points` run down the strip:
+   `library.select 'ids=[ID]' spot.add mode=clone 'points=[[x,y0],[x,y1]]' size=0.02 'source=[dx,dy]'`.
+   - `remove` and `fill` (content-aware) smeared in tests. Next to the subject, `remove` pulled the
+     subject's jacket colour into the patch.
+   - Pick a source offset (normalized `[dx,dy]`) that lands on plain background **away from the
+     subject**, at least the spot's radius from the subject's edge. The empty path or hedge beside the
+     bystander works well.
+   - **Long lines** (fence rails, path edges, curbs) crossing behind the bystander: split the strokes
+     above and below the line. For the part on the line, shift the source along the line's slope, for
+     example `[0.07,0.025]` for a curb that rises 0.035 per 0.1, so the line continues.
+   - Check what each source lands on. One copied a dark post into the patch; move it with
+     `spot.update index=N 'source=[dx,dy]'`.
+   - Fix leftovers (a head, a hat, a shoulder next to the subject) with small spots of about 0.01.
+     Fix a bad patch with `spot.update`, or `spot.delete index=N` and redo it.
+3. **Never paint over the subject.** Where a bystander overlaps the subject's outline, stop the spot
+   a little short and accept a faint trace.
+4. **Check** with a 2000 px before | after (`sbs.ps1`) of the area, and at 100 % on a 6000 px export
+   (one file per call; it takes 25–30 s, and a slow one made the app unreachable for a few minutes).
+5. **Report honestly:**
+   - Small or blurred figures against repeating texture (bamboo, foliage) come out clean at normal
+     size.
+   - Figures standing across long straight lines leave stepped rails or a doubled edge at 100 %.
+   - Figures overlapping the subject leave a trace.
+   - Suggest a crop instead when it would remove them more cleanly.
+
 ## AI Denoise (high ISO)
 
 The user's rule: ISO 3200 or above makes a photo a **candidate**. Judge each candidate on 100 % crops.
