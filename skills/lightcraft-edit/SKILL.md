@@ -173,12 +173,14 @@ than the background (Subject lift).
   - In testing, the user asked for more lift on night faces in three review rounds. Faces at about
     55 % of the background were still too dark, and 70–77 % was accepted.
   - Faces that are near-silhouettes (under 20) may need the mask at its limit. Report what you reached.
-- **Darker faces in daylight** (under 60 with the look applied): `lift.daylight_dark_face` (default
-  **about 75–85 % of the background mean, never above it**). Use the daylight ladder below, not the
-  night one.
+- **Darker faces in daylight** (under 60 with the look applied): aim for `lift.daylight_dark_face`
+  (default **about 75–85 % of the background mean, never above it**), but **the mask cap wins**: stop
+  at `lift.daylight_mask_max` even when the face is still short, and report the ratio. Use the
+  daylight ladder below, not the night one.
   - In testing (overcast bamboo grove, dark hair against dark foliage), shadows 40 plus exposure up to
     1.05 brought faces to 85–94 with a visible halo, and the user said the lift was too much. The
-    standard 0.45 / shadows 15 (0.65 on the darkest face) gave faces of 43–76 and was accepted.
+    standard 0.45 / shadows 15 (0.65 on the darkest face) gave faces of 43–76, 52–95 % of the
+    background, and the user accepted all five.
 - At night the goal is a face at least as bright as the background. Report the face/background ratio.
 
 **Measure** on a render with the look applied and no mask. Report each box's region.
