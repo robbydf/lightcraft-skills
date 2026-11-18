@@ -1,0 +1,9 @@
+{
+  "name": "lightcraft",
+  "version": "0.1.0",
+  "description": "Cull and edit photos in LightCraft (ArtCraft's photo editor) from Claude Code: start the GUI with its MCP bridge, pick and reject frames, and apply measured edits.",
+  "author": { "name": "robbydf" },
+  "repository": "https://github.com/robbydf/lightcraft-skills",
+  "license": "MIT",
+  "keywords": ["lightcraft", "artcraft", "photography", "culling", "photo-editing", "windows"]
+}
