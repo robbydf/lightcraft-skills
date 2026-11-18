@@ -36,7 +36,8 @@ Edit only the photos the user names, or a scene type they approved for a batch. 
     that every look and value is still unapproved.
   - If a key this skill needs is missing, ask the user and offer to add the answer.
   - Names in `backticks` such as `look.night` or `lift.mask_limit` are those keys.
-- Helpers in `$LC_SCRIPTS`, run with `PSX <script> <args>`:
+- Helpers in `$LC_SCRIPTS`, run with `PSX <script> <args>`. Give the script name only
+  (`PSX sbs.ps1 …`): `PSX` adds the folder, so a full path fails with "-File parameter does not exist".
   - `lfit.ps1 <file> x0 y0 x1 y1`: line fit on one long edge (a pole, a roofline), returns its angle in
     degrees. More reliable than `M tilt`, which responds only 20–60 % to a real rotation on busy scenes.
   - `rgb.ps1 <file> x0,x1,y0,y1`: mean R/G/B of a region, for colour checks (signs, food, skin).
@@ -167,12 +168,18 @@ than the background (Subject lift).
 
 **Target:**
 - **Face already reads 60 or more** (look applied, no mask): lift it by `lift.bright_face` (default **+15–25 %**).
-- **Darker faces, which includes most night portraits:** lift until the face reaches `lift.dark_face`
+- **Darker faces at night:** lift until the face reaches `lift.dark_face`
   (default **at least 75–80 % of the background mean**), with no % ceiling.
   - In testing, the user asked for more lift on night faces in three review rounds. Faces at about
     55 % of the background were still too dark, and 70–77 % was accepted.
   - Faces that are near-silhouettes (under 20) may need the mask at its limit. Report what you reached.
-- The goal is a face at least as bright as the background. Report the face/background ratio.
+- **Darker faces in daylight** (under 60 with the look applied): `lift.daylight_dark_face` (default
+  **about 75–85 % of the background mean, never above it**). Use the daylight ladder below, not the
+  night one.
+  - In testing (overcast bamboo grove, dark hair against dark foliage), shadows 40 plus exposure up to
+    1.05 brought faces to 85–94 with a visible halo, and the user said the lift was too much. The
+    standard 0.45 / shadows 15 (0.65 on the darkest face) gave faces of 43–76 and was accepted.
+- At night the goal is a face at least as bright as the background. Report the face/background ratio.
 
 **Measure** on a render with the look applied and no mask. Report each box's region.
 - **Face:** a box on the forehead and cheeks.
@@ -209,7 +216,12 @@ than the background (Subject lift).
   change is subtle: face R−B drops by only about 1 point.
 - **Black or navy clothing** turns grey under the mask (it rises more than 50 %): set mask `shadows`
   to 5.
-- **Adjusting the lift on a dark face** (night, or a face under 60): **shadows first.**
+- **Adjusting the lift on a dark face in daylight:** keep mask `shadows` at 15 (5 on black
+  clothing). Step only the mask exposure, by 0.1, from 0.45 up to `lift.daylight_mask_max` (default
+  0.65). Stop at the daylight target above, or at that cap, and report a face that is still short.
+  Never use the shadows ladder in daylight: lifted shadows turn dark hair grey against dark foliage,
+  which reads as a halo.
+- **Adjusting the lift on a dark face at night** (night or dim indoor scenes only): **shadows first.**
   - Raise mask `shadows` from 15 in steps of about 8, up to `lift.shadows_max` (default 40), at the
     current exposure.
   - Only when shadows reach that maximum and the face is still short of the target, step the mask
@@ -301,6 +313,10 @@ coordinates from it: fractions of the full frame, as the grid labels show.
 **Edge crops (both paths):** centre each 100 % crop on the mask boundary against a mid or bright
 background, with at least 30 % of the crop being background. Crops placed inside the subject showed no
 halo in testing even when there was one.
+- **Check at true 100 %, not on a 2000 px render,** for the strongest mask in each batch and for any
+  mask with exposure above 0.6: export that photo at `longEdge=6000` (one per call), and centre the
+  crop where dark hair meets a dark background (foliage, shade). That edge is where halos show first.
+  In testing, 2000 px edge crops passed five portraits whose halo the user saw on the review page.
 
 ## Local masks: signs, food, details
 

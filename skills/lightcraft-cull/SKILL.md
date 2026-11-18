@@ -131,6 +131,11 @@ Input: group lines from `bursts.py` such as
 
        In testing, the user un-picked three singles that had passed at 640 px, for the eyes, a bit of
        blur and an unflattering face.
+     - **Subject focus:** with the same 2000 px export, also crop the main person's body or the
+       main subject (region ≤ 0.3 × 0.3), even when the face reads fine small. If the subject is out of
+       focus (soft edges everywhere on the person while the background is crisper, or nothing on the
+       subject sharp), the single stays **unmarked** `unsure`, reason "subject out of focus". In
+       testing, the user un-picked a full-length portrait for this after it had been picked and edited.
      - **Soft but readable is still a pick.** A face that is a little soft, with no visible blur or
        streaks at 100 %, passes (`pick.soft_but_readable`). In testing, the user kept such frames.
      - Scenes where people are only small passers-by don't need either check. Skip steps 3–4 for a
