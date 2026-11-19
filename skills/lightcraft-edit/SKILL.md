@@ -121,11 +121,15 @@ photo of a chunk, export every unedited photo in calls of 5–6 ids (more passes
   preset to the whole chunk first and had to reset every photo and export again.
 - **One export batch per tool call.** Four batches in one call ran past 120 s.
 ```bash
-"$CLI" run --connect app.export 'ids=[501,502,503,504,505]' dir="$SP/before2k" longEdge=2000 format=jpeg naming='{name}' conflict=overwrite
-"$CLI" run --connect app.export 'ids=[501,502,503,504,505]' dir="$SP/before1k" longEdge=1000 format=jpeg naming='{name}' conflict=overwrite
+bash "$LC_SCRIPTS/export-ids.sh" "$SP/before2k" before 2000 501 502 503 504 505   # -> before2k/501-before.jpg ...
+bash "$LC_SCRIPTS/export-ids.sh" "$SP/before1k" before 1000 501 502 503 504 505
 ```
-Then rename `before2k/<file>.jpg` to `ID-before.jpg`. The 1000 px files are the classification and
-clipping-check renders.
+`export-ids.sh` names each file `ID-SUFFIX.jpg`: LightCraft has no id token in export names (only
+the camera file name), and the helper maps the result's `files` list, which comes in the order of the
+ids. Use it for every export of a known id (befores, afters, full-size denoise checks). The 1000 px
+files are the classification and clipping-check renders.
+- **Never pipe `app.export` into `head`** or another command that closes early: the export broke
+  with "os error 232". Redirect the result to a file instead.
 - **When every photo of the chunk gets a 2000 px before anyway** (a small chunk, or a test where all
   photos get review cards), skip the 1000 px export: use the 2000 px befores for `M sheet` and
   `M batch`, and export the afters at 2000 px too, so before and after are measured at the same size. Never reset an edited photo just to get a "before".
@@ -255,10 +259,13 @@ than the background (Subject lift).
   at a time and report the blown %.
 - **"Lift the highlights" (or "brighter") on a dark light-show subject** means brighter lights, not
   the Highlights slider: on a mid-dark float (subject mean about 15) `light.highlights` barely moves
-  it (14.7 -> 15.8). Raise `light.whites` (+40) and then exposure (+0.5) and check blown on the
-  subject. In testing this gave +56 % with blown 0, and the user approved it. The user's request
-  overrides "never raise exposure on a light show". A worker that finds a float this dark (subject
-  mean under about 20) leaves it and lists it under "Needs the user".
+  it (14.7 -> 15.8). Raise exposure (+0.5) and set `light.whites` 10, then check blown on the
+  subject. In testing, whites +40/45 with exposure +0.5 brightened 19 dark castle frames, but the
+  user then asked for whites 10 on all of them: whites barely moves the subject mean (0–1 point) and
+  only adds glare on lamps and lit stone. The user's request overrides "never raise exposure on a
+  light show". A worker that finds a subject this dark (mean under about **16**) leaves it and lists
+  it under "Needs the user", offering "Brighten (exposure +0.5, whites 10)". In testing the user
+  brightened frames at 8.5–15.6 and kept most frames at 16–20 as they were.
 - Run `M clip` right after adding it, and remove it if blown rose by more than 0.5 points.
   - **Night scenes with lit signs or lamps** (`exposure.night_signs_ignore_blown`): measure blown with `-Region` boxes that leave out the
     signs and lamps. Blown inside signs doesn't count. Keep the boost even when the whole-frame blown
@@ -394,9 +401,11 @@ coordinates from it: fractions of the full frame, as the grid labels show.
 
 ### Path A: SAM 3 mask
 
-1. Load the model for the photo and wait until it is ready:
-   `library.select 'ids=[ID]' segment.prepare`, then repeat `segment.model.status` (a few seconds
-   apart) until `loaded: true`, `busy: false` and `analyzing: false`. Allow about 60 s on first load.
+1. Load the model for the photo and wait until it is ready, in one call with a tool timeout of
+   about 300 s: `bash "$LC_SCRIPTS/seg-wait.sh" ID` (runs `segment.prepare`, then polls
+   `segment.model.status` until `loaded: true`, `busy: false` and `analyzing: false`; prints
+   `ready after Ns`). A cold load took 55–135 s in testing. Don't hand-poll: each poll costs a turn.
+   Check that the new mask component has its `seg` data before the coverage check.
 2. Make the mask (the result's `activeMask` is N; if it says `pending`, repeat `get_develop {id}` until
    the mask appears in `masks`):
    - **Preferred: describe each main person** (tested). Use 2–4 words: who they are plus their
@@ -527,7 +536,9 @@ ISO `denoise.iso_candidate` (default 3200) or above makes a photo a **candidate*
    area: sky, a wall, or skin. Name the crop region in the report.
 2. **Skip** if that mid-tone area shows no visible grain. For example, a black sky plus a lit, clean
    subject (a floodlit castle at ISO 4000): denoising would only soften the stonework.
-   - **Decide once per venue and ISO, not per frame.** The first candidate at an ISO in a venue sets
+   - **Decide once per venue, ISO and look, not per frame.** A night-look carrousel and a light-show
+     castle in the same venue are separate decisions: judge each on a frame with mid-tone surfaces
+     (a wall, a canopy, skin), not on a black sky. The first candidate at an ISO in a venue sets
      the decision (denoise at the amount, or skip) for every frame at that ISO in that venue, so one
      parade isn't half denoised. In testing, one chunk skipped black-sky parade frames and the next
      denoised them all. Write the decision into the report, so the next chunk of the venue follows it.
@@ -559,6 +570,9 @@ ISO `denoise.iso_candidate` (default 3200) or above makes a photo a **candidate*
    - Set `detail.nrLuminance` 10 and `detail.nrColor` 15 **before** rendering the 0 % strip, so every
      strip has the same noise reduction.
    - Measured so far: ISO 3200 was clean at 50 %, ISO 4000 at 50 %, and ISO 5000 and 6400 needed 65 %.
+   - **People frames under tungsten need more:** at ISO 4000 the user asked for 75 % on a portrait
+     where 50 % left grain on the skin and the wall. On own people at ISO 4000 and above, check the
+     skin crop at 65 and 75 % as well, and offer the higher one on the card.
    - Judge both a mid-tone area (sky or wall) and skin.
    - If 65 and 75 look alike, take 65.
    - On a night portrait at ISO 6400, 50 % left grain in the sky, 65 % was clean, and 75 % made the skin waxy.
@@ -567,11 +581,14 @@ ISO `denoise.iso_candidate` (default 3200) or above makes a photo a **candidate*
    - **Wait with the helper, in the background, not in repeated foreground calls (tokens):**
      ```bash
      rm -f "${SP:?}/denoise.done"
-     bash "$LC_SCRIPTS/denoise-wait.sh" "$SP"      # as a background tool call; polls every 20 s
+     bash "$LC_SCRIPTS/denoise-wait.sh" "$SP" --ids 501,502,503   # as a background tool call; polls every 20 s
      # ... measure the frames that don't need denoise, write review lines ...
      until [ -f "$SP/denoise.done" ]; do sleep 5; done; cat "$SP/denoise.done"; rm -f "${SP:?}/denoise.done"
      ```
-     The marker says `done after Ns on gpu|cpu` (or `TIMEOUT …` after an hour). Don't hand-write the
+     The marker says `done after Ns on gpu|cpu` (or `TIMEOUT …` after an hour). **Always pass
+     `--ids`** (the photos you just changed): it then also waits until each one's own
+     `denoise.status id=N` state is `ready` (`idle` means denoise is off). Without it, an empty queue
+     looks "done" before the app has queued the new render, or long after it finished. Don't hand-write the
      loop: in testing, an unquoted `$CLI` killed one silently. In testing, workers also spent many
      turns on 180 s foreground polls. The helper must have exited before the report (see "finish
      with nothing running").
@@ -613,7 +630,7 @@ Run `M clip` on the 1000 px render before any edit and on the after render.
     **once** (the light-show look is at -60, so -75); if blown on the subject
     didn't fall by at least 0.3 points, put the value back and add a "Flagged edits" card with the
     numbers. In testing, highlights -75 left blown at 4.24 % against 4.25 %.
-  - **Subject got darker:** if the subject's mean after the look is under 20 **and** more than 10 %
+  - **Subject got darker:** if the subject's mean after the look is under 16 **and** more than 10 %
     lower than before, list it under "Needs the user" with both means (it may need the "brighter"
     fix, see Global exposure boosts), and keep its 2000 px before. A small drop is normal: the user
     called a floodlit castle that went from 24.3 to 22.1 fine, and the light-show look takes dim
@@ -638,12 +655,26 @@ Follow `straighten` in the preferences:
      (0.33 / -1.09 / 4.04° on one night facade, with few inliers). There, try
      `library.select 'ids=[ID]' crop.autoStraighten` first, re-export, and check it with `lfit.ps1`.
      In testing it gave -2.44° and the lines then measured level; the user approved it.
+   - **Light-show and night frames still get this check.** A floodlit castle against a black sky is
+     not exempt: in testing the user asked for alignments on 4 castle frames that had none.
+   - **When the measurements can't settle it** (tapered towers, `lfit.ps1` and `crop.autoStraighten`
+     disagreeing or failing): make a tilt preview sheet and let the user pick:
+     ```bash
+     PSX tiltprev.ps1 -In "$SP/ID-before.jpg" -Out "$SP/ID-tilt.jpg" -Region "0.2,0.8,0,1" -Cols 2
+     ```
+     The default angles are -6, -4, -2, 0, +2, +4, +6 (positive = clockwise, as `crop.straighten`),
+     each tile with vertical guide lines. Put the sheet on a card with a `decide` listing the angles,
+     and apply the pick with `crop.straighten`. When the user hesitates between two (for example "+2,
+     +5.5 might look correct"), make a second sheet in 1° steps around them. In testing, the user's
+     final picks were +2 to +5.5°, so start with the wide range, not ±2°.
    - Under 0.3° on both verticals, or on the horizon: already straight, stop.
 3. **Which case:**
    - **Plain roll** (verticals on both sides lean the same way): **rotate** with
      `library.select 'ids=[ID]' crop.straighten angle=<deg>` (-45 to 45, positive = clockwise; it
      keeps the largest crop). Try the measured correction, re-export, re-measure, and flip the sign if
      it got worse. It worked on 5 of 5 test photos (0.7–3.8°, 0.9–4.4 % crop per edge).
+     After a rotation set `set_develop {id, settings: {geometry: {constrain_crop: true}}}` so no
+     blank corners show (in testing +5.5° cost a 6.1 % crop per edge, which the user accepted).
      - When a smaller angle saves important content and keeps the verticals within ±0.7°, use it:
        1.8° instead of 2.5° kept a sign board in frame.
    - **Keystone** (camera tilted up: left verticals lean one way, right ones the other, for example
@@ -814,6 +845,13 @@ Change → ask what to change if the note doesn't say).
      at its limit short of the target, a failed mask, a crop over 5 % (over 12 % for a keystone `geometry.upright`
      correction: the user accepted 8–12 % per edge on four street views), a clip rule that stopped, a failed straightening, a
      photo left without a look. Other photos get Fine / Change automatically.
+   - **Leave `group` out of a card without a `decide`:** it only sorts decision cards.
+   - **Every photo the chunk changed gets a card**, including plain look-only photos and redo
+     rounds. In testing, a redo round wrote no card for one changed photo, so the user never saw it.
+     Count: the ids you edited = the lines in `review.jsonl`.
+   - **A grain finding gets its crop:** when the report says grain remains (or a denoise amount was
+     chosen on a crop), that 100 % crop goes on the photo's card. In testing, a card showed only a
+     face crop for a wall the report called grainy.
 2. **The orchestrator** builds the page from all chunk folders, then opens it in the browser pane:
    ```bash
    python -I "$LC_SCRIPTS/review.py" "$SP/review.html" "$SP"/chunk* --title "<day> review"

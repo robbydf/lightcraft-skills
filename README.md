@@ -79,7 +79,10 @@ scripts/
   editlog.py                        valid edits.jsonl lines (start, done, check --fix)
   people.py                         photo -> named people map from LightCraft face naming
   looks.py                          look presets vs preferences; end-of-chunk develop check
-  denoise-wait.sh                   wait for the denoise queue, write a marker (device, time)
+  denoise-wait.sh                   wait for the denoise queue and the listed photos (--ids), write a marker
+  seg-wait.sh                       prepare SAM 3 for a photo and wait until it is ready
+  export-ids.sh                     export photos as ID-SUFFIX.jpg (no id token in export names)
+  tiltprev.ps1                      tilt preview sheet (-6..+6 deg) for the user to pick an angle
 preferences.example.md
 ```
 
