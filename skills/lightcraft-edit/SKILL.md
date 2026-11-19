@@ -20,6 +20,9 @@ Edit only the photos the user names, or a scene type they approved for a batch. 
   RUN="$RUNS/<library name>"   # the cull run's folder; ask the user if unsure
   SP="<session scratchpad>/edit"; mkdir -p "$SP"
   ```
+  Repeat all three lines in **every** Bash call, `RUN` and `SP` included: a new call starts with
+  them unset. `editlog.py` refuses to run without a valid `RUN`; in testing, an unset `RUN` once
+  wrote the edit log into the current folder.
   If `lc-env.sh` can't find LightCraft, ask the user for the install folder and write
   `LIGHTCRAFT_DIR=<folder>` to `~/.claude/lightcraft/config.env`.
   - Use forward slashes in `path=`.
@@ -100,7 +103,10 @@ photo of a chunk, export every unedited photo in calls of 5–6 ids (more passes
 "$CLI" run --connect app.export 'ids=[501,502,503,504,505]' dir="$SP/before1k" longEdge=1000 format=jpeg naming='{name}' conflict=overwrite
 ```
 Then rename `before2k/<file>.jpg` to `ID-before.jpg`. The 1000 px files are the classification and
-clipping-check renders. Never reset an edited photo just to get a "before".
+clipping-check renders.
+- **When every photo of the chunk gets a 2000 px before anyway** (a small chunk, or a test where all
+  photos get review cards), skip the 1000 px export: use the 2000 px befores for `M sheet` and
+  `M batch`, and export the afters at 2000 px too, so before and after are measured at the same size. Never reset an edited photo just to get a "before".
 - **2000 px befores are required** for every review-list id and every photo that isn't plain (own
   people, a denoise candidate, a tilt). Plain photos may skip the 2000 px before to save time.
 - **Also keep the 2000 px before of every photo the report lists under "Needs the user"** (a dim
@@ -514,10 +520,13 @@ ISO `denoise.iso_candidate` (default 3200) or above makes a photo a **candidate*
 5. **Render it:** run `denoise.queue 'ids=[…]'` after every amount change. The cached picture is
    for the old amount. Then poll `denoise.status` until `queued` is 0 and `running` is null.
    - **Wait in one background loop, not in repeated foreground calls (tokens):** run a Bash loop in
-     the background that polls `denoise.status` every 20 s and exits when `queued` is 0 and
-     `running` is null, and do other work (numbers, review lines) meanwhile. In testing, workers
-     spent many turns on 180 s foreground polls. The loop must end before the report (see "finish
-     with nothing running").
+     the background that polls `denoise.status` every 20 s, and when `queued` is 0 and `running` is
+     null writes a marker file (`touch "$SP/denoise.done"`) and exits. Do other work (numbers, review
+     lines) meanwhile. In testing, workers spent many turns on 180 s foreground polls. The loop must
+     end before the report (see "finish with nothing running").
+   - **A plain `sleep N` in a foreground call is blocked** for workers. To wait for the marker, use
+     one call with a loop: `until [ -f "$SP/denoise.done" ]; do sleep 5; done` (with a `timeout`
+     that covers the wait), then delete the marker.
    - The built-in denoiser on the GPU takes about 1 minute per photo, and it needs no download.
    - **On the CPU it is much slower.** LightCraft can stop answering ("drew no frame") for 5–6
      minutes while it runs. Wait and keep polling `denoise.status`. Don't start another export, mask
@@ -543,6 +552,14 @@ Run `M clip` on the 1000 px render before any edit and on the after render.
     rose under 1.
   - If crushed on the subject still rose more than 2 points at blacks 0, add a "Flagged edits" card
     with the numbers. Never raise exposure on a light show to fix it.
+  - **Blown on a light show:** most blown pixels are lamps, bulbs and saturated blue or purple light,
+    which `light.highlights` doesn't bring back. Try highlights -15 **once**; if blown on the subject
+    didn't fall by at least 0.3 points, put the value back and add a "Flagged edits" card with the
+    numbers. In testing, highlights -75 left blown at 4.24 % against 4.25 %.
+  - **Subject got darker:** if the subject's mean after the look is under 25 and lower than before,
+    list it under "Needs the user" with both means (it may need the "brighter" fix, see Global
+    exposure boosts), and keep its 2000 px before. In testing, the look took a floodlit castle from
+    24.3 to 22.1.
 - Each fix runs at most 2 times; then stop and report the numbers.
 
 ## Straightening
@@ -742,6 +759,10 @@ downscaled before/after sheet can't be zoomed, so the user can't judge noise or 
     one is shifted.
   - **Full ladder:** show 0/50/65/75 on the first photo at each ISO level in the run (see AI
     Denoise); other photos show 0 % against the chosen amount.
+  - **A denoise crop on a review card is 0 % against the chosen amount, both with the look applied**
+    (a full-size export with `enhance.denoise` 0, then the amount). It is not the unedited photo: a
+    full-size unedited before would need a reset. Label it so: "100 % crop: denoise 0 % (top) /
+    50 % (bottom), same look".
 - Send them with the file-sending tool and name the photos by their file name. These same crops go in
   the review page.
 

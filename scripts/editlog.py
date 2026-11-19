@@ -71,6 +71,10 @@ def main(argv):
     if len(argv) < 2:
         sys.exit(__doc__)
     run, cmd, rest = argv[0], argv[1], argv[2:]
+    # An unset $RUN arrives as "" (or the command name shifts into its place): never write elsewhere.
+    if not run.strip() or not os.path.isdir(run) or not (
+            os.path.exists(os.path.join(run, "log.jsonl")) or os.path.exists(os.path.join(run, "edits.jsonl"))):
+        sys.exit(f"editlog: RUN is not a run folder: {run!r} (set RUN in this Bash call; for a new run folder, create an empty edits.jsonl in it first)")
     if cmd == "start" and len(rest) == 4:
         pid, cursor, masks, rnd = rest
         append(run, {"id": int(pid), "cursor": None if cursor == "null" else int(cursor),
