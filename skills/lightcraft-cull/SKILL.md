@@ -38,7 +38,7 @@ with `runstate.py picks`.
 - Helpers (all in `$LC_SCRIPTS`):
   - `bursts.py` groups photos and can drop groups already in the log and split the rest into chunks.
   - `runstate.py` holds the durable state: baseline, log, check, summary and rollback.
-  - `measure.ps1` modes: `sharp` (sharpness), `tilt`, `mean` (brightness 0–255), `crops` (up to 4
+  - `measure.py` modes (run as `M <mode> …`; needs Pillow and numpy): `sharp` (sharpness), `tilt`, `mean` (brightness 0–255), `crops` (up to 4
     files stacked into one PNG) and `grid`. `-Region x0,x1,y0,y1` takes fractions of the frame, and
     `-Out` must end in `.png`.
 

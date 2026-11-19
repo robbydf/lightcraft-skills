@@ -29,12 +29,15 @@ first, or let the skills do it on first use.
 
 ## Requirements
 
-- **Windows only.** The scripts use Windows PowerShell 5.1 with System.Drawing, the registry and
-  Windows process APIs. macOS and Linux are **not supported**.
+- **Windows, macOS or Linux.** The helpers are Python and bash. Tested on Windows 11; on macOS and
+  Linux the install-folder detection and the GUI start/stop use best-guess paths (see Configuration),
+  so set `LIGHTCRAFT_DIR` if LightCraft isn't found.
 - **LightCraft**, tested on **0.21.1**. The install folder is detected automatically (see Configuration).
-- **Git Bash.** The skills run CLI commands from Bash, because PowerShell 5.1 strips the quotes
-  inside JSON arguments.
-- **Python 3**, standard library only (no numpy or PIL).
+- **Bash:** Git Bash on Windows (the skills run CLI commands from Bash, because PowerShell 5.1 strips
+  the quotes inside JSON arguments); the system bash on macOS and Linux.
+- **Python 3.8+** (`python`, or `python3` where there is no `python`), with **Pillow and numpy** for the
+  image helpers: `python -m pip install --user pillow numpy`. The other scripts use the standard
+  library only.
 - **Optional:** LightCraft's SAM 3 segmentation model, for describe and click masks. The skills never
   download it, because it needs your licence acceptance. Install it from LightCraft yourself. Without
   it, the edit skill uses the Auto Mask brush.
@@ -52,10 +55,15 @@ Everything personal lives outside the plugin, in `~/.claude/lightcraft/` (or `$L
 **Install folder detection,** in this order:
 1. the `LIGHTCRAFT_DIR` environment variable;
 2. `LIGHTCRAFT_DIR` in `config.env`;
-3. the uninstall entries in the registry;
-4. `Program Files\ArtCraft\LightCraft`, `Program Files\LightCraft` or `%LOCALAPPDATA%\Programs\…`.
+3. then per system:
+   - **Windows:** the uninstall entries in the registry, then `Program Files\ArtCraft\LightCraft`,
+     `Program Files\LightCraft` or `%LOCALAPPDATA%\Programs\…`;
+   - **macOS:** `LightCraft.app` or `ArtCraft/LightCraft.app` in `/Applications` or `~/Applications`
+     (the CLI in `Contents/MacOS`);
+   - **Linux:** `lightcraft-cli` on `PATH`, `/opt/lightcraft`, `/opt/ArtCraft/LightCraft`,
+     `~/.local/share/lightcraft`.
 
-`scripts/find-lightcraft.ps1` prints what it finds.
+`python scripts/find_lightcraft.py` prints what it finds.
 
 **Token:** LightCraft 0.21.1 has no auth on its control port (127.0.0.1 only), so no token is needed.
 `-TokenFile` / `LIGHTCRAFT_TOKEN_FILE` only sets `LIGHTCRAFT_TOKEN` inside the start script, which is a
@@ -70,11 +78,12 @@ skills/lightcraft-mcp/SKILL.md
 skills/lightcraft-cull/SKILL.md   plus panel-brief.md (the borderline panel's reviewer brief)
 skills/lightcraft-edit/SKILL.md
 scripts/
-  lc-env.sh             sourced by every Bash call: sets CLI, LC_SCRIPTS, RUNS, PREFS, M, PSX
-  find-lightcraft.ps1   install folder detection
-  lightcraft-mcp.ps1    start / stop
-  measure.ps1           sharp, tilt, mean, clip, crops, sheet (contact sheet), batch (many boxes), grid
-  lfit.ps1 rgb.ps1 sbs.ps1   line fit, region colour, phone before|after images
+  lc-env.sh             sourced by every Bash call: sets CLI, LC_SCRIPTS, LC_PY, RUNS, PREFS, M, LCX
+  find_lightcraft.py    install folder detection (Windows, macOS, Linux)
+  lightcraft-mcp.py     start / stop
+  measure.py            sharp, tilt, mean, clip, crops, sheet (contact sheet), batch (many boxes), grid
+  lfit.py rgb.py sbs.py   line fit, region colour, phone before|after images
+  lcimg.py lcargs.py    shared image code (Pillow + numpy) and PowerShell-style options
   bursts.py runstate.py review.py   burst grouping, durable run state, review page
   editlog.py                        valid edits.jsonl lines (start, done, check --fix)
   people.py                         photo -> named people map from LightCraft face naming
@@ -82,7 +91,7 @@ scripts/
   denoise-wait.sh                   wait for the denoise queue and the listed photos (--ids), write a marker
   seg-wait.sh                       prepare SAM 3 for a photo and wait until it is ready
   export-ids.sh                     export photos as ID-SUFFIX.jpg (no id token in export names)
-  tiltprev.ps1                      tilt preview sheet (-6..+6 deg) for the user to pick an angle
+  tiltprev.py                       tilt preview sheet (-6..+6 deg) for the user to pick an angle
 preferences.example.md
 ```
 

@@ -16,7 +16,7 @@ Edit only the photos the user names, or a scene type they approved for a batch. 
 - Run CLI commands **from Bash**: Windows PowerShell 5.1 strips the `"` inside JSON arguments.
   Variables don't persist between calls, so start every Bash call with:
   ```bash
-  source "<base>/../../scripts/lc-env.sh"   # <base> = this skill's base directory, written with forward slashes (C:/Users/...); sets CLI, LC_SCRIPTS, RUNS, PREFS, M, PSX
+  source "<base>/../../scripts/lc-env.sh"   # <base> = this skill's base directory, written with forward slashes (C:/Users/...); sets CLI, LC_SCRIPTS, LC_PY, RUNS, PREFS, M, LCX, PSX
   RUN="$RUNS/<library name>"   # the cull run's folder; ask the user if unsure
   SP="<session scratchpad>/edit"; mkdir -p "$SP"
   ```
@@ -47,7 +47,7 @@ Edit only the photos the user names, or a scene type they approved for a batch. 
       `M sheet $(ls "$SP"/before1k/*.jpg | head -9) -Out "$SP/sheet1.png"`.
     - `batch`: one list file, one measurement per line: `<image>|x0,x1,y0,y1[|label]` (relative
       images are read from the list's folder). Prints mean, blown and crushed for every line in a
-      single PowerShell start. Use it for before/after numbers on a whole chunk: about 100 separate
+      single Python start. Use it for before/after numbers on a whole chunk: about 100 separate
       `M` calls were the slowest part of a chunk in testing.
     - `grid`.
   - `-Region x0,x1,y0,y1` takes fractions of the frame, and `-Out` must end in `.png`. `M mean`
@@ -70,12 +70,13 @@ Edit only the photos the user names, or a scene type they approved for a batch. 
     that every look and value is still unapproved.
   - If a key this skill needs is missing, ask the user and offer to add the answer.
   - Names in `backticks` such as `look.night` or `lift.mask_limit` are those keys.
-- Helpers in `$LC_SCRIPTS`, run with `PSX <script> <args>`. Give the script name only
-  (`PSX sbs.ps1 …`): `PSX` adds the folder, so a full path fails with "-File parameter does not exist".
-  - `lfit.ps1 <file> x0 y0 x1 y1`: line fit on one long edge (a pole, a roofline), returns its angle in
+- Helpers in `$LC_SCRIPTS`, run with `LCX <script> <args>`. Give the script name only
+  (`LCX sbs.py …`): `LCX` adds the folder. They need Pillow and numpy (`"$LC_PY" -m pip install --user
+  pillow numpy`); a missing package is reported by name. The old name `PSX x.ps1` still works.
+  - `lfit.py <file> x0 y0 x1 y1`: line fit on one long edge (a pole, a roofline), returns its angle in
     degrees. More reliable than `M tilt`, which responds only 20–60 % to a real rotation on busy scenes.
-  - `rgb.ps1 <file> x0,x1,y0,y1`: mean R/G/B of a region, for colour checks (signs, food, skin).
-  - `sbs.ps1 -Before <f> -After <f> -Region x0,x1,y0,y1 -Out <f.jpg>`: a labelled BEFORE | AFTER
+  - `rgb.py <file> x0,x1,y0,y1`: mean R/G/B of a region, for colour checks (signs, food, skin).
+  - `sbs.py -Before <f> -After <f> -Region x0,x1,y0,y1 -Out <f.jpg>`: a labelled BEFORE | AFTER
     side-by-side for viewing on a phone, at most 1600 px wide.
 - MCP tools may be deferred. Load them in one ToolSearch call:
   `select:mcp__lightcraft__render_preview,mcp__lightcraft__set_develop,mcp__lightcraft__get_develop,mcp__lightcraft__export`.
@@ -480,7 +481,7 @@ clearly met. Make the mask as in Path A, check coverage with the magenta overlay
   - Values: `local.sign` (default `{"exposure":-0.3,"highlights":0,"saturation":-15}`, or -25 on a
     pale or white screen).
   - Highlights -20 turned a near-white screen saturated cyan (R 225→177). Check the sign's colour with
-    `rgb.ps1` before→after: it should get darker while keeping its R/G/B balance. Measure colour on
+    `rgb.py` before→after: it should get darker while keeping its R/G/B balance. Measure colour on
     2000 px exports.
   - Raise the people's mask exposure by +0.1.
 - **Food that should look rich** (raw meat that "was very red in real life"): describe mask such as
@@ -519,7 +520,7 @@ nearby texture.
      Fix a bad patch with `spot.update`, or `spot.delete index=N` and redo it.
 3. **Never paint over the subject.** Where a bystander overlaps the subject's outline, stop the spot
    a little short and accept a faint trace.
-4. **Check** with a 2000 px before | after (`sbs.ps1`) of the area, and at 100 % on a 6000 px export
+4. **Check** with a 2000 px before | after (`sbs.py`) of the area, and at 100 % on a 6000 px export
    (one file per call; it takes 25–30 s, and a slow one made the app unreachable for a few minutes).
 5. **Report honestly:**
    - Small or blurred figures against repeating texture (bamboo, foliage) come out clean at normal
@@ -648,19 +649,19 @@ Follow `straighten` in the preferences:
 
 1. If `get_develop` shows `geometry.upright` is not `off` and you did not set it, don't touch it.
 2. **Measure:** export `library.select 'ids=[ID]' app.export path="$SP/off.jpg" longEdge=1500`.
-   - Fit 2 long true verticals (poles, building edges, door frames) with `lfit.ps1`, using
-     coordinates from `M grid`. Fit the horizon with `lfit.ps1` on that line.
+   - Fit 2 long true verticals (poles, building edges, door frames) with `lfit.py`, using
+     coordinates from `M grid`. Fit the horizon with `lfit.py` on that line.
    - `M tilt` (n ≥ 2000) is a cross-check only.
-   - **Busy night scenes** (lit buildings, few clean edges): `lfit.ps1` can disagree with itself
+   - **Busy night scenes** (lit buildings, few clean edges): `lfit.py` can disagree with itself
      (0.33 / -1.09 / 4.04° on one night facade, with few inliers). There, try
-     `library.select 'ids=[ID]' crop.autoStraighten` first, re-export, and check it with `lfit.ps1`.
+     `library.select 'ids=[ID]' crop.autoStraighten` first, re-export, and check it with `lfit.py`.
      In testing it gave -2.44° and the lines then measured level; the user approved it.
    - **Light-show and night frames still get this check.** A floodlit castle against a black sky is
      not exempt: in testing the user asked for alignments on 4 castle frames that had none.
-   - **When the measurements can't settle it** (tapered towers, `lfit.ps1` and `crop.autoStraighten`
+   - **When the measurements can't settle it** (tapered towers, `lfit.py` and `crop.autoStraighten`
      disagreeing or failing): make a tilt preview sheet and let the user pick:
      ```bash
-     PSX tiltprev.ps1 -In "$SP/ID-before.jpg" -Out "$SP/ID-tilt.jpg" -Region "0.2,0.8,0,1" -Cols 2
+     LCX tiltprev.py -In "$SP/ID-before.jpg" -Out "$SP/ID-tilt.jpg" -Region "0.2,0.8,0,1" -Cols 2
      ```
      The default angles are -6, -4, -2, 0, +2, +4, +6 (positive = clockwise, as `crop.straighten`),
      each tile with vertical guide lines. Put the sheet on a card with a `decide` listing the angles,
@@ -731,7 +732,7 @@ classify every photo:
 
 **Lean workers (speed).** Write this into the brief:
 - **Plain photos** (look only: no own people to lift, ISO below the denoise candidate, not tilted)
-  are judged on the numbers alone: `M clip` before and after, `M tilt` or `lfit.ps1`, and the whole-frame
+  are judged on the numbers alone: `M clip` before and after, `M tilt` or `lfit.py`, and the whole-frame
   mean. Don't Read their renders. Apply their look with the preset in one call and export their afters
   together.
 - **Read images only** for:
@@ -861,7 +862,7 @@ Change → ask what to change if the note doesn't say).
 **On a phone:** the user often reviews away from the laptop, where the review page can't be opened. A
 downscaled before/after sheet can't be zoomed, so the user can't judge noise or detail from it.
 - **Standard output, every batch** (unless `review.phone_sbs` is false): the worker makes one `ID-sbs.jpg` per photo with
-  `sbs.ps1 -Before ID-before.jpg -After ID-after.jpg -Region <the area that changed> -Out ID-sbs.jpg`
+  `LCX sbs.py -Before ID-before.jpg -After ID-after.jpg -Region <the area that changed> -Out ID-sbs.jpg`
   (whole frame `0,1,0,1` for looks and straightening, the faces for a lift). Send these with the
   file-sending tool, listing the ids in order, and ask for verdicts by id.
 - **The overall look:** before/after pairs at about 1000 px.

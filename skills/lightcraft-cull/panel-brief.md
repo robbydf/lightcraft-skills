@@ -42,7 +42,7 @@ LightCraft or its CLI. Some frames may come from the same burst. Judge each fram
 1. Read each photo whole. Decide what the main subject is.
 2. Make a **100 % crop** of every main subject's face, or of the focal point if there is no person, and Read it:
    ```bash
-   powershell -NoProfile -ExecutionPolicy Bypass -File "<SCRIPTS>/measure.ps1" crops "<PHOTOS>/P01.jpg" -Region x0,x1,y0,y1 -Out "<OUT>/P01-crop.png"
+   python -E "<SCRIPTS>/measure.py" crops "<PHOTOS>/P01.jpg" -Region x0,x1,y0,y1 -Out "<OUT>/P01-crop.png"
    ```
    - Region is in fractions of the frame (x0,x1,y0,y1), at most 0.3 × 0.3 (about 0.1 × 0.1 for eyes).
    - Up to 4 files per call, with the same region for each.

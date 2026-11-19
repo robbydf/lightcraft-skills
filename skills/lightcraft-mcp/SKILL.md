@@ -10,18 +10,20 @@ Two subcommands, both handled by the plugin's script. The argument after the ski
 With no argument, ask which.
 
 The script is in the plugin's `scripts` folder, two levels above this skill's base directory
-(`<base>/../../scripts/lightcraft-mcp.ps1`). Use the real base directory you were given when this
-skill loaded. From PowerShell:
+(`<base>/../../scripts/lightcraft-mcp.py`). Use the real base directory you were given when this
+skill loaded. From Bash or PowerShell (use `python3` on macOS and Linux if there is no `python`):
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File "<base>\..\..\scripts\lightcraft-mcp.ps1" start
-powershell -NoProfile -ExecutionPolicy Bypass -File "<base>\..\..\scripts\lightcraft-mcp.ps1" stop
+```bash
+python "<base>/../../scripts/lightcraft-mcp.py" start
+python "<base>/../../scripts/lightcraft-mcp.py" stop
 ```
 
-- **Install folder:** found automatically by `find-lightcraft.ps1` in this order: `-LightCraftDir`,
+- **Install folder:** found automatically by `find_lightcraft.py` in this order: `-LightCraftDir`,
   the `LIGHTCRAFT_DIR` environment variable, `LIGHTCRAFT_DIR=` in `~/.claude/lightcraft/config.env`,
-  the registry, then `Program Files\ArtCraft\LightCraft`. That folder holds `lightcraft.exe` (the GUI)
-  and `lightcraft-cli.exe` (the CLI and bridge).
+  then per system: the registry and `Program Files\ArtCraft\LightCraft` (Windows),
+  `/Applications/LightCraft.app/Contents/MacOS` (macOS), `lightcraft-cli` on `PATH` or `/opt/lightcraft`
+  (Linux). That folder holds the GUI (`lightcraft.exe`; `lightcraft` or `LightCraft` elsewhere) and the
+  CLI and bridge (`lightcraft-cli.exe`; `lightcraft-cli` elsewhere).
 - **Control address:** `127.0.0.1:7980`.
 - **MCP server name in Claude Code:** `lightcraft`.
 
