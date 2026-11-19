@@ -88,9 +88,10 @@ every photo that needs nothing else (no mask, no denoise, no straightening), the
 renders together the same way. Use a new file name for each working render: a re-export under the
 same name can be read back stale.
 
-1. **Classify** from the 1000 px render of the unedited photo:
+1. **Classify** from the 1000 px render of the unedited photo. In a batch with a venue table (see
+   Batches), the look comes from the table: only check the rest.
    - night street or indoor, light show or black sky, or daylight;
-   - whether there is a people or pet subject;
+   - whether there is a subject of the user's own people or pets (strangers don't count);
    - whether verticals or a horizon could be tilted (see Straightening).
    - Get the ISO with `photo.allMetadata id=ID` (EXIF "ISO Speed").
 2. **Straighten**, if it measures tilted (see Straightening). It comes first because transforms move
@@ -132,6 +133,22 @@ the preferences file:
   - Treat every photo from one venue the same way. In testing, one restaurant was edited in one chunk
     and left unedited in the next.
   - The exception is a venue the user asked to leave unedited.
+
+**Looks as presets (speed).** Apply a look to many photos in one call instead of one `set_develop`
+each:
+1. Once per run, save each approved look as a LightCraft preset holding only its own values:
+   `preset.saveRecipe name="LC look.night" group="lightcraft" 'recipe=[{"id":"light.shadows","value":30},…]'`.
+   - A recipe takes plain develop controls only, with no white balance, geometry or crop. Set any of
+     those with `set_develop` per photo.
+   - Saving the same recipe under the same name returns the existing preset, so this is safe to repeat.
+     Use `presets.list` to find its id.
+2. Record each photo's history cursor first, as usual (see "Before the first change to a photo").
+   Then apply the look to every photo of that look in the chunk with one call:
+   `preset.apply id=<presetId> 'ids=[501,502,503,…]'`.
+3. **The first time in a run, check one photo with `develop.get`.** Every look value must be set and
+   nothing else changed. If it isn't, fall back to `set_develop` per photo and say so in the report.
+4. Per-photo extras (blacks from a clip fix, denoise noise reduction, white balance) still go through
+   `set_develop` afterwards.
 
 **Before using a look,** check that it is `approved: true`. If not, show one sample and wait for
 approval (see New looks). The `lift.mask.*` values have the same gate: if one isn't approved, show the
@@ -224,6 +241,10 @@ than the background (Subject lift).
   - **Sunlit scene where every ordinary surface reads above 130** (sunlit gravel or stone): use the 2
     ordinary surfaces closest to the range and say so.
   - Compare the face with the mean of the 2 boxes.
+- **Strangers get no mask (speed and intent).** Only the user's own people are subjects (see
+  lightcraft-cull, "Whose faces count": named faces, else the day's people list by clothing). Don't
+  measure or mask strangers, crowds, staff or performers. Report "no own people in frame: scene" and
+  move on.
 - **Several people:** decide on the **darkest main-subject face**, and one mask covers all of them.
   Faces narrower than about 1.5 % of the frame width get no mask. Report them.
 - **Mask only if the face is more than `lift.mask_if_darker_percent` (default 5 %) darker than the
@@ -427,9 +448,17 @@ ISO `denoise.iso_candidate` (default 3200) or above makes a photo a **candidate*
 4. **Choose the amount by the crop:** the lowest of `denoise.amounts` (default 50, 65 and 75 %) that is clean at 100 %.
    - **Full ladder once per ISO level per run (speed):** render 0/50/65/75 only on the first
      candidate at each ISO level (for example 3200, 4000, 6400) in the whole run, and append
-     `{"iso":6400,"amount":65,"id":ID}` to `$RUN/denoise-ladder.jsonl`. Later candidates at that ISO
-     start at the recorded amount and render **only 0 % and that amount**. Step up only if grain
-     still shows. Read that file before the first denoised photo of a chunk.
+     `{"iso":6400,"amount":65,"id":ID}` to `$RUN/denoise-ladder.jsonl`. Read that file before the
+     first denoised photo of a chunk.
+   - **Later candidates at a recorded ISO:**
+     - Set the recorded amount straight away.
+     - Make **one** full-size export at that amount and cut one 100 % crop of a mid-tone area and,
+       if there is a face, the skin.
+     - Make no 0 % render and no second full-size export.
+     - Step up one amount only if grain still shows in that crop.
+     - Skip-the-grain-check (step 2) also uses this same single export, so the first full-size export
+       of a photo serves both.
+     - A review-list photo that needs a 0 % comparison for the user is the only exception.
    - Set `detail.nrLuminance` 10 and `detail.nrColor` 15 **before** rendering the 0 % strip, so every
      strip has the same noise reduction.
    - Measured so far: ISO 3200 was clean at 50 %, ISO 4000 at 50 %, and ISO 5000 and 6400 needed 65 %.
@@ -500,10 +529,43 @@ Follow `straighten` in the preferences:
 
 ## Batches (more than 5 photos)
 
-Hand the batch to `sonnet` subagents with a brief file, **one chunk of about 20 photos per worker**,
-one worker at a time (LightCraft has one active photo). A worker's context fills up after about 20
-edited photos. Give each chunk its own folder. Subagents aren't told the skill's base directory, so
-list in the brief:
+Hand the batch to `sonnet` subagents with a brief file, one worker at a time (LightCraft has one
+active photo).
+- **Chunk size:** about 25–30 photos when most are plain (look only), and about 15–20 when many need
+  masks or denoise. What fills a worker's context is mostly the images it reads, so keep plain photos
+  numeric (see Lean workers below).
+- Give each chunk its own folder.
+
+**Venue table (orchestrator, before the first chunk).** Classify the venues once, so workers don't
+classify every photo:
+1. Split the day into venues by capture time (a gap of about 10 minutes or more, or a clear change of
+   place on the cull's 640 px sheets or 1000 px exports).
+2. Give each venue one look by the rules in Looks, and write `$RUN/venues-<day>.txt` with one line
+   per venue: `<first id>-<last id> | <venue> | <look> | <why>`. For example
+   `630-650 | Asakusa street, night | look.night | lit signs, no large sky`.
+3. Give each worker the lines for its ids.
+   - The worker uses the table's look.
+   - If a photo clearly doesn't fit its venue's look (a different scene inside the range), the worker
+     uses the right look and lists the id in the report.
+   - If a whole venue looks wrong, the worker keeps the table's look and adds a review card. It never
+     re-decides a venue on its own.
+
+**Lean workers (speed).** Write this into the brief:
+- **Plain photos** (look only: no own people to lift, ISO below the denoise candidate, not tilted)
+  are judged on the numbers alone: `M clip` before and after, `M tilt` or `lfit.ps1`, and the whole-frame
+  mean. Don't Read their renders. Apply their look with the preset in one call and export their afters
+  together.
+- **Read images only** for:
+  - photos with own people (face boxes, grids, coverage checks, mask edges);
+  - denoise crops;
+  - straightening fits;
+  - review-list photos;
+  - any photo whose numbers look odd: blown or crushed rising past the clip rules, or a mean far from
+    the rest of its venue.
+- **Each Read is one small file:** a grid or crop PNG, or a 1000 px render. Never a 2000 or 6000 px
+  file.
+
+Subagents aren't told the skill's base directory, so list in the brief:
 - this skill's base directory as an absolute path (forward slashes), so the worker can `source` the
   Setup line, plus `RUN`, its `SP` folder and the preferences path (`$PREFS`), and tell it to read the
   Setup section first;
@@ -511,7 +573,8 @@ list in the brief:
   testing, one worker edited only its 3 review ids and reported the chunk done. For a redo, say
   whether to revert first, or (as for a user's "Change" note) to add to the current edit, with a
   new round tag;
-- which looks are approved, and whether this is a trial batch for proposed looks;
+- which looks are approved, and whether this is a trial batch for proposed looks; the venue-table
+  lines for its ids and the preset id of each look; the day's people list;
 - the review material and `review.jsonl` (see Showing results);
 - the report: at most 15–25 lines, with no images.
 
