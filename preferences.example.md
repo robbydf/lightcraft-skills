@@ -22,7 +22,9 @@ for `mask.adjust`.
 - `pick.moment_test`: true (posed people photos: every main person looks at the camera, with no face hidden or turned away; otherwise unmarked. Candid shots of people doing something may look away)
 - `pick.face_check`: true (singles: a 100 % face crop; odd eyes, visible blur or an unflattering face mean unmarked)
 - `pick.soft_but_readable`: pick (slightly soft, no visible blur at 100 %)
-- `record_shots`: unmarked (maps, signs, menus, timetables, tickets)
+- `record_shots`: unmarked (maps, signs, menus, timetables, tickets, phone screens)
+- `record_shots.food`: keep (food, food displays, shop counters and stalls are judged like any photo; menus stay record shots)
+- `people.own`: [] (names of the user's people as named in LightCraft's faces; empty = use the day's people list by clothing)
 - `panel`: trial (`off`, `trial` = show the panel's changes before applying them, or `on`)
 - `panel.trial_days`: 2
 
@@ -69,6 +71,7 @@ for `mask.adjust`.
 - `lift.daylight_dark_face`: about 75–85 % of the background mean, never above it; the mask cap below wins
 - `lift.daylight_mask_max`: 0.65 (daylight: keep mask shadows 15 and step exposure only, up to this)
 - `lift.mask.daylight`: `{"exposure":0.45,"shadows":15,"temp":0}`, approved: false
+- `lift.mask.bright_face`: `{"exposure":0.20,"shadows":15,"temp":0}` (start value for a face of 60 or more), approved: false
 - `lift.mask.night`: `{"exposure":0.30,"shadows":15,"temp":0}` (start value), approved: false
 - `lift.warm_skin_temp`: -4
 - `lift.mask_limit`: 1.6 (never 2 or above)

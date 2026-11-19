@@ -117,6 +117,18 @@ the preferences file:
 - `look.scene_map`: which look other scene types reuse. With the defaults, a night skyline over water
   with a cloudy sky gets the light-show look, because the night look's shadows +30 turned a cloudy sky
   brown-grey. A dim venue gets the night look at any ISO.
+  - **Classify by the light, not the place:**
+    - A dim interior (a temple or shrine hall, a shop, a restaurant, an arcade) is a dim venue, so it
+      gets `look.night`, even when lanterns or lit displays are in frame. In testing, a dim temple
+      interior got the light-show look by mistake.
+    - `look.light_show` is for a lit subject against a black or night sky that fills a large part of
+      the frame: a lit gate, tower or skyline, fireworks, a parade.
+    - A night street with lit signs and no large area of sky is a night scene.
+    - A covered area at dusk that still reads bright (whole-frame mean 100 or more, ISO 800 or
+      lower) isn't settled yet. Use `look.night` and put the venue's first photo on the review list
+      with `decide` "Night or daylight look for <venue>?".
+  - **Write the venue and its look on one line** in the report, so the next chunk matches it.
+    Ambiguous venues go on the review list as above.
   - Treat every photo from one venue the same way. In testing, one restaurant was edited in one chunk
     and left unedited in the next.
   - The exception is a venue the user asked to leave unedited.
@@ -168,6 +180,17 @@ than the background (Subject lift).
 
 **Target:**
 - **Face already reads 60 or more** (look applied, no mask): lift it by `lift.bright_face` (default **+15–25 %**).
+  - **In daylight this applies even when the face matches the background.** The 5 % gate below is for
+    darker faces only. A face that reads the same as the background still looks dull in daylight. Skip
+    the lift only when the face is clearly brighter, more than 5 % above the background mean.
+    - In testing, two daylight portraits had faces at the background mean and got no mask. On review,
+      the user asked for both: "face needs to be brightened up a bit".
+  - Start at `lift.mask.bright_face` (default `{"exposure":0.20,"shadows":15,"temp":0}`), not at the
+    daylight value. On the same portraits, 0.45 gave +38 %, 0.25 gave +24 %, 0.15 gave +17 %, and
+    0.20 gave +20 %. The user approved 0.20.
+  - Step the mask exposure by 0.05 to land inside the target.
+  - Only the user's own people get a lift. Strangers in a crowd or street scene are part of the scene,
+    so no mask (see lightcraft-cull, "Whose faces count").
 - **Darker faces at night:** lift until the face reaches `lift.dark_face`
   (default **at least 75–80 % of the background mean**), with no % ceiling.
   - In testing, the user asked for more lift on night faces in three review rounds. Faces at about
@@ -184,7 +207,13 @@ than the background (Subject lift).
 - At night the goal is a face at least as bright as the background. Report the face/background ratio.
 
 **Measure** on a render with the look applied and no mask. Report each box's region.
-- **Face:** a box on the forehead and cheeks.
+- **Face:** a box on the skin of the forehead and cheeks: from just under the eyebrows to just
+  above the mouth, and between the outer corners of the eyes. Leave out hair, eyes, eyebrows,
+  shadowed eye sockets, glasses and specular highlights. Read the box off an `M grid` of the face,
+  never a guess from the 1000 px view.
+  - **Record the box** (x0,x1,y0,y1) in `report.md` and in the photo's `review.jsonl` `changes`.
+  - **A redo uses the recorded box.** In testing, two workers measured the same face as 84 and 59 with
+    different boxes. The first number led to "no mask needed", and the user then asked for a lift.
 - **Background:** exactly 2 boxes of the same size beside the subject, on surfaces of ordinary
   brightness (foliage, ground, walls of a normal colour).
   - Never use white stone, snow, white walls, signs, lamps, lit windows or sky.
@@ -198,7 +227,8 @@ than the background (Subject lift).
 - **Several people:** decide on the **darkest main-subject face**, and one mask covers all of them.
   Faces narrower than about 1.5 % of the frame width get no mask. Report them.
 - **Mask only if the face is more than `lift.mask_if_darker_percent` (default 5 %) darker than the
-  background mean.**
+  background mean**. The exception is a daylight face of 60 or more, which follows the bright-face rule
+  in Target above.
   Within 5 %, or brighter, no mask; report both numbers. Decide this from the numbers before making a
   mask, never by masking and then deleting. For example, an indoor portrait whose face was already
   brighter got no mask.
@@ -409,6 +439,11 @@ ISO `denoise.iso_candidate` (default 3200) or above makes a photo a **candidate*
 5. **Render it:** run `denoise.queue 'ids=[…]'` after every amount change. The cached picture is
    for the old amount. Then poll `denoise.status` until `queued` is 0 and `running` is null.
    - The built-in denoiser on the GPU takes about 1 minute per photo, and it needs no download.
+   - **On the CPU it is much slower.** LightCraft can stop answering ("drew no frame") for 5–6
+     minutes while it runs. Wait and keep polling `denoise.status`. Don't start another export, mask
+     or denoise job, and don't restart LightCraft. In testing it always recovered by itself.
+   - Set the amount only through `set_develop` (`enhance.denoise`). `denoise.toggle` ignores any
+     amount you pass it.
 
 ## Clipping check
 
@@ -472,7 +507,10 @@ list in the brief:
 - this skill's base directory as an absolute path (forward slashes), so the worker can `source` the
   Setup line, plus `RUN`, its `SP` folder and the preferences path (`$PREFS`), and tell it to read the
   Setup section first;
-- the ids, and for a redo, that they must be reverted first;
+- the ids, and that **every** id gets the full edit, not only the ones on the review list. In
+  testing, one worker edited only its 3 review ids and reported the chunk done. For a redo, say
+  whether to revert first, or (as for a user's "Change" note) to add to the current edit, with a
+  new round tag;
 - which looks are approved, and whether this is a trial batch for proposed looks;
 - the review material and `review.jsonl` (see Showing results);
 - the report: at most 15–25 lines, with no images.
@@ -486,6 +524,10 @@ list in the brief:
   report).
 - **End-of-batch check, for every edited id:** run `develop.get`. Fail if any mask has
   `exposure >= 2` or `amount` other than 100.
+  - The daylight cap (`lift.daylight_mask_max`, shadows 15) applies only to photos with the
+    daylight look.
+  - A mask on a photo with `look.night` or `look.light_show` follows the night ladder: shadows up to
+    `lift.shadows_max`, and exposure up to `lift.mask_limit`. Don't flag it as over the daylight cap.
 - **Cull marks:** editing must not change any rating or flag. Never skip this check; it must report
   0 mismatches and 0 changes outside the run:
   ```bash
@@ -515,7 +557,8 @@ Change → ask what to change if the note doesn't say).
      proposed look as a crop, and add a `decide`. In testing, the user couldn't tell what the "after"
      of an unedited photo was.
    - Add `decide` (and a `group`) only when the user must choose: a proposed look, a lift stopped
-     at its limit short of the target, a failed mask, a crop over 5 %, a clip rule that stopped, a failed straightening, a
+     at its limit short of the target, a failed mask, a crop over 5 % (over 12 % for a keystone `geometry.upright`
+     correction: the user accepted 8–12 % per edge on four street views), a clip rule that stopped, a failed straightening, a
      photo left without a look. Other photos get Fine / Change automatically.
 2. **The orchestrator** builds the page from all chunk folders, then opens it in the browser pane:
    ```bash
@@ -562,6 +605,8 @@ Never claim a photo is brighter, cleaner or straight without a measurement.
 
 - `geometry.upright` is a command. Setting `{geometry: {upright: …}}` through `set_develop` only
   stores the mode.
+- **Apply develop values with the MCP `set_develop` tool.** The CLI `develop.set id=ID …` returns
+  `ok` but doesn't apply the values. Check with `develop.get` if in doubt.
 - Exports reflect the current develop state, including a +3 coverage check left in place.
 - **Full-size exports** (`longEdge=6000`) take 25–30 s each. Export 1–2 per call: a call of 8 timed
   out. The export then kept running in the background, and for about a minute every request failed

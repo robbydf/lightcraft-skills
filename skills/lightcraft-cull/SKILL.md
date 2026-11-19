@@ -49,7 +49,37 @@ follow `record_shots` (default: unmarked).
 |---|---|---|
 | **Pick** | The best frame of a burst. A single photo that passes the reject test **and the moment test** (below). Bursts over 10 frames: one pick per distinct framing or moment. Two near-equal frames: both. | `photo.rate rating=3` |
 | **Reject** | Passes the reject test below, whether in a burst or a single | `photo.flag flag=reject` |
-| **Unmarked** | Usable but not a pick: weaker moment, a main person not looking at the camera in a posed photo, odd eyes, visible blur on a face at 100 %, an unflattering face, or **any doubt** (including eyes that may be closed). Closed eyes are a reject: see (d). Also **plain or record shots** (maps, signs, info boards, menus, timetables, tickets, shots taken only to remember a detail), even when sharp | nothing (list doubts as `unsure`; log record shots with reason "record shot") |
+| **Unmarked** | Usable but not a pick: weaker moment, a main person not looking at the camera in a posed photo, odd eyes, visible blur on a face at 100 %, an unflattering face, or **any doubt** (including eyes that may be closed). Closed eyes are a reject: see (d). Also **plain or record shots** (maps, signs, info boards, menus, timetables, tickets, phone screens, shots taken only to remember a detail), even when sharp | nothing (list doubts as `unsure`; log record shots with reason "record shot") |
+
+**Food is not a record shot** (`record_shots.food`, default `keep`). Food, food displays, shop
+counters, market stalls and sweets in a shop window are judged like any other photo, even with price
+labels in frame. Menus stay record shots. In testing, the user reversed the un-pick of a mochi display
+("I am capturing the foods available in Japan, not available at home") and asked for every food
+record shot of the trip to be picked and edited, but not the menu.
+
+**Whose faces count.** Every face rule here (the moment test, the face check, closed eyes (d)) and in
+the panel applies only to **the user's own people**: the family or friends the photo is of. Strangers'
+faces are part of the scene: a crowd street is a scene photo, whatever the faces in it do. In testing,
+the panel voted to drop a crowd street for the faces in it, and the user kept it: "the faces here are
+not our faces, this is just a scene". Decide who is whose, in this order:
+1. **Named faces.** If faces are named in LightCraft (`faces.suggest 'ids=[…]'` returns a
+   `suggestion` with a name for some face, or `people.own` in the preferences lists names), a face
+   suggested as one of those names is the user's own. Unnamed faces with no suggestion are strangers.
+2. **Otherwise, the day's people list.** Before culling a day, look at its posed photos (people
+   stopped and facing the camera): those are the user's people. Write one line per day naming them by
+   clothing, such as "woman in white shirt and rust skirt; boy in dark jacket", and give it to every
+   worker and panel reviewer for that day. People wear the same clothes all day, so the list holds
+   across that day's photos.
+3. **A face counts as the user's own** if it matches the list, or it is clearly the point of the
+   photo: large (about 5 % of the frame width or more), in focus, framed as the subject, or looking at
+   or reacting to the camera.
+4. **Strangers:** passers-by, crowds, staff, performers, people seen from behind, and small or
+   edge-cut figures that match no one on the list.
+5. **Doubt:** treat the face as the user's own (the stricter reading), and add "own or stranger?" to
+   the reason, so it reaches the review list.
+
+If the user wants this reliable, offer once to name their people in LightCraft: a few faces per
+person is enough for `faces.suggest`.
 
 **Never:**
 - Delete anything, or use the `pick` flag.
@@ -146,6 +176,15 @@ Input: group lines from `bursts.py` such as
        testing, the user un-picked a full-length portrait for this after it had been picked and edited.
      - **Soft but readable is still a pick.** A face that is a little soft, with no visible blur or
        streaks at 100 %, passes (`pick.soft_but_readable`). In testing, the user kept such frames.
+       - **But a defocused or shaken face is not "soft but readable".** If the focus sits on the
+         background, or the face shows smear or shake at 100 %, it is visible blur, even when the face
+         can still be recognised. This includes high-ISO night frames.
+       - In one trip's review the user dropped every unsure single whose only fault was softness on a
+         face (4 of 4, night, ISO 6400), and a skyline with camera shake. They kept every unsure single
+         whose only fault was the moment: looking away, looking down, or a grimace (4 of 4).
+       - So for `unsure` reasons, a blur reason leans drop and a moment reason leans keep. Say which
+         one it is in the reason, such as "blur: face defocused" or "moment: looking down", so the
+         review sorts them.
      - Scenes where people are only small passers-by don't need either check. Skip steps 3–4 for a
        single.
 3. **Sharpness.** Only for bursts, or a doubtful single: export at 2000 px to `$SP/g101-2k` (same
@@ -253,7 +292,9 @@ a time, and checks their results.
        - 3–0 or 2–1 keep: the photo becomes a pick (`photo.rate rating=3`) if it was unsure.
        - 3–0 drop: it stays unmarked; a soft pick loses its stars (`photo.rate rating=0`, only on this
          run's own marks).
-       - Any 2–1 drop goes on the user's review list unchanged.
+       - Any 2–1 drop goes on the user's review list unchanged, **with the drop voters' reasons**
+         (the reason field may never be empty: a card that only says "panel voted 2-1 to drop" gives
+         the user nothing to judge).
        - The panel never rejects. Rejects follow only the reject test.
     4. **Log** each change with `runstate.py log`, reason "panel 3-0 keep" or similar, then run
        `check`.

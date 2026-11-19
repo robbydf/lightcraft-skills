@@ -11,8 +11,18 @@ LightCraft or its CLI. Some frames may come from the same burst. Judge each fram
 ## What the photographer keeps (learned from their own decisions)
 - **Scenery, streets, crowds, shrines, food and animal photos are valid picks**, even with no family member in
   them. Don't drop a photo because nobody in it is family, or because it "has no story".
+- **Food is never a record shot:** food displays, shop counters, stalls and sweets are valid picks, even with
+  price labels. Menus are the exception.
+- **Only the photographer's own people are main subjects.** The prompt may give the day's people list (by
+  clothing). Strangers (passers-by, crowds, staff, performers) are part of the scene: never drop a photo for a
+  stranger's eyes, expression or gaze. A crowd street is judged as a scene. If you can't tell whether a person
+  is one of theirs, treat them as one of theirs and write "own or stranger?" in the reason.
 - Keep near-duplicates. Choosing between them isn't your job.
 - Soft but readable is fine: a face that is slightly soft but shows no visible blur at 100 % stays a pick.
+  A face that is defocused (the background is sharper) or smeared by shake is **visible blur**, even when it can
+  still be recognised. The photographer has dropped every such frame, but kept candid frames where the only
+  fault was the moment (looking away or down).
+- Start every reason with its kind, `blur:`, `eyes:`, `moment:`, `face:` or `focus:`, so a 2–1 vote keeps its reason.
 - **Drop** a photo if any of these is visible on a person who is a main subject (large in the frame, or clearly
   the point of the photo):
   - **Not looking at the camera, in a posed photo only:** people stopped and face the camera (a portrait or
