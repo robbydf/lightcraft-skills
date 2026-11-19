@@ -70,7 +70,9 @@ def logged_keys(path):
         with open(path, encoding="utf-8-sig") as f:
             for line in f:
                 if line.strip():
-                    keys.add(json.loads(line)["group"])
+                    d = json.loads(line)
+                    if "group" in d:  # runstate amend lines have none
+                        keys.add(d["group"])
     except FileNotFoundError:
         pass
     return keys

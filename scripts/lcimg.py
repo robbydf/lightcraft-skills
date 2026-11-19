@@ -11,8 +11,12 @@ try:
     import numpy as np
     from PIL import Image, ImageDraw, ImageFont
 except ImportError as e:  # pragma: no cover - depends on the machine
-    sys.exit(f"{os.path.basename(sys.argv[0])}: needs Pillow and numpy ({e.name} is missing). "
-             "Install them with: python -m pip install --user pillow numpy")
+    _hint = ("Install them with: python -m pip install --user pillow numpy")
+    if sys.flags.isolated or sys.flags.no_user_site:
+        _hint = ("This Python was started with -I or -s, which hides packages installed with --user: "
+                 "run the helper through M / LCX, or with python -E. If they are not installed: "
+                 "python -m pip install --user pillow numpy")
+    sys.exit(f"{os.path.basename(sys.argv[0])}: needs Pillow and numpy ({e.name} is missing). {_hint}")
 
 __all__ = ["np", "Image", "ImageDraw", "ImageFont", "parse_region", "files", "load_rgb", "gray",
            "font", "box", "save"]
@@ -38,14 +42,27 @@ def files(args):
     """Expand wildcards (the shell may not have) and fail loudly on a missing file."""
     out = []
     for a in args:
-        if any(c in a for c in "*?["):
+        a = native_path(a)
+        if os.path.isfile(a):
+            m = [a]
+        elif any(c in a for c in "*?["):
             m = sorted(glob.glob(a))
         else:
-            m = [a] if os.path.isfile(a) else []
+            m = []
         if not m:
             sys.exit(f"missing file: {a}")
         out += [os.path.abspath(p) for p in m]
     return out
+
+
+def native_path(p):
+    """On Windows, turn an msys path (/c/Users/...) into C:/Users/... . Bash converts paths only on
+    the command line, so paths read from list files (M batch) or typed into a heredoc arrive as is."""
+    if os.name == "nt":
+        m = re.match(r"^/([a-zA-Z])(/|$)", p)
+        if m:
+            return f"{m.group(1).upper()}:/" + p[3:]
+    return p
 
 
 def load_rgb(path):
@@ -79,7 +96,10 @@ def font(points, bold=False):
             return ImageFont.truetype(name, px)
         except OSError:
             continue
-    return ImageFont.load_default(px)
+    try:
+        return ImageFont.load_default(px)
+    except TypeError:  # Pillow < 10.1 has no size argument
+        return ImageFont.load_default()
 
 
 def box(r, w, h):

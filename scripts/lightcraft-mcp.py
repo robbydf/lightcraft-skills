@@ -6,7 +6,8 @@ Usage: python lightcraft-mcp.py start|stop [-Port 7980] [-Library DIR] [-Scope l
 (env LIGHTCRAFT_DIR, config.env, then the usual install places for this system). Standard library only.
 
 Exit codes: 2 LightCraft runs without the control port, 3 the port never opened, 4 the CLI can't
-drive the GUI, 5 the bridge handshake failed, 6 `claude mcp add` failed (or claude not found),
+drive the GUI, 5 the bridge handshake failed, 6 `claude mcp add` failed (or claude not found, or a
+project .mcp.json registers another address),
 7 stop: the GUI is still open, 8 stop: the registration is still there, 9 LightCraft not found.
 """
 import argparse
@@ -176,6 +177,27 @@ def registered(claude):
     return bool(claude) and run([claude, "mcp", "get", NAME]).returncode == 0
 
 
+def registration(claude):
+    """(scope, command, args) of the current registration, or None. scope: local, user, project or ?."""
+    r = run([claude, "mcp", "get", NAME])
+    if r.returncode != 0:
+        return None
+    out = text(r.stdout)
+    def field(name):
+        m = re.search(rf"^\s*{name}:\s*(.*)$", out, re.M)
+        return m.group(1).strip() if m else ""
+    sc = field("Scope").lower()
+    scope = next((s for s in ("local", "user", "project") if sc.startswith(s)), "?")
+    return scope, field("Command"), field("Args")
+
+
+def same_path(a, b):
+    try:
+        return os.path.normcase(os.path.abspath(a)) == os.path.normcase(os.path.abspath(b))
+    except (TypeError, ValueError):
+        return False
+
+
 def start(a, lcdir, cli, addr):
     if a.TokenFile and os.path.isfile(a.TokenFile):
         with open(a.TokenFile, encoding="utf-8-sig") as fh:
@@ -234,14 +256,37 @@ def start(a, lcdir, cli, addr):
     if not claude:
         say("ERROR: the claude command is not on PATH, so the MCP server can't be registered")
         return 6
-    if registered(claude):
-        say(f"claude: MCP server '{NAME}' already registered")
-    else:
-        run([claude, "mcp", "add", "-s", a.Scope, NAME, "--", cli, "mcp", "--connect", addr])
-        if not registered(claude):
-            say("ERROR: 'claude mcp add' failed")
+    want_args = f"mcp --connect {addr}"
+    # `claude mcp get` shows one entry (local over project over user); walk down the scopes.
+    for _ in range(4):
+        reg = registration(claude)
+        if reg and same_path(reg[1], cli) and reg[2] == want_args:
+            say(f"claude: MCP server '{NAME}' already registered ({reg[0]} scope)")
+            break
+        if reg and reg[0] not in ("local", "user"):
+            say(f"ERROR: '{NAME}' is registered in the {reg[0]} scope (a project's .mcp.json?) as "
+                f"'{reg[1]} {reg[2]}', not '{cli} {want_args}'; fix that entry (only if the user wants)")
             return 6
-        say(f"claude: registered MCP server '{NAME}' ({a.Scope} scope) -> {cli} mcp --connect {addr}")
+        if reg and reg[0] == "user" and a.Scope == "local":
+            # Leave the user's global entry alone (other projects may use it): a local entry wins.
+            say(f"claude: the user-scope '{NAME}' points at '{reg[1]} {reg[2]}'; adding a local one, "
+                "which takes precedence here (the user entry is left as it is)")
+            reg = None
+        if not reg:
+            run([claude, "mcp", "add", "-s", a.Scope, NAME, "--", cli, "mcp", "--connect", addr])
+            now = registration(claude)
+            if not (now and same_path(now[1], cli) and now[2] == want_args):
+                say("ERROR: 'claude mcp add' failed")
+                return 6
+            say(f"claude: registered MCP server '{NAME}' ({a.Scope} scope) -> {cli} mcp --connect {addr}")
+            break
+        say(f"claude: '{NAME}' pointed at '{reg[1]} {reg[2]}' ({reg[0]} scope); removing it")
+        if run([claude, "mcp", "remove", NAME, "-s", reg[0]]).returncode != 0:
+            say(f"ERROR: could not remove the old '{NAME}' registration ({reg[0]} scope)")
+            return 6
+    else:
+        say(f"ERROR: could not settle the '{NAME}' registration (claude mcp get {NAME})")
+        return 6
     say(f"READY gui={addr} mcp={NAME}")
     return 0
 

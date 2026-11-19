@@ -59,9 +59,9 @@ says so.
 | Exit | Meaning | What to do |
 |------|---------|------------|
 | 2 | start: LightCraft is running **without** `--control` | Tell the user, and offer `stop` then `start`. Never kill it unasked. |
-| 3 | start: the control port never opened | Check `%APPDATA%\LightCraft\logs\lightcraft.log` (`control server failed to bind` means the port is busy). |
+| 3 | start: the control port never opened | Check the log the script names: `%APPDATA%\LightCraft\logs\lightcraft.log` on Windows, `~/Library/Application Support/LightCraft/logs/` on macOS, `~/.local/share/LightCraft/logs/` on Linux (`control server failed to bind` means the port is busy). |
 | 4 / 5 | start: the CLI or bridge handshake failed | Show the error line. |
-| 6 | start: `claude mcp add` failed | Run it by hand to see the error. |
+| 6 | start: `claude mcp add` failed, `claude` isn't on PATH, or a project `.mcp.json` registers `lightcraft` at another address | Show the error line. A local or user registration pointing elsewhere (another port, a moved install) is replaced automatically; a `.mcp.json` entry is the user's to change. |
 | 7 | stop: the GUI is still open (a dialog?) | Ask the user, and re-run `stop -Force` only on their yes. |
 | 8 | stop: the registration is still present | Usually a project's own `.mcp.json` entry, which stop deliberately keeps. Run `claude mcp get lightcraft` to see the scope, and remove it by hand only if the user wants. |
 | 9 | LightCraft not found | Ask for the install folder and save it as `LIGHTCRAFT_DIR=<folder>` in `~/.claude/lightcraft/config.env`. |

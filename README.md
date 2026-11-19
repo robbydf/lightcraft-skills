@@ -95,6 +95,9 @@ scripts/
 preferences.example.md
 ```
 
+Tests (no LightCraft needed; the image tests skip without Pillow and numpy):
+`python -E -m unittest discover -s tests -v` from the repo root (`python3` on macOS and Linux).
+
 ## Safety
 
 - The cull marks only with explicit ids, never deletes, never touches photos you marked before the

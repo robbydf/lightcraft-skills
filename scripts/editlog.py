@@ -1,6 +1,8 @@
 """Write and check $RUN/edits.jsonl, the edit skill's per-photo record.
 
 Usage:
+  python -I editlog.py RUN init                           # first edit of a library with no cull run:
+                                                          # creates RUN (absolute path) and edits.jsonl
   python -I editlog.py RUN start ID CURSOR MASKS ROUND   # CURSOR: a number or null
   python -I editlog.py RUN done ID ROUND [key=value ...]  # extra fields, e.g. look=night denoise=50
   python -I editlog.py RUN check [--fix]                  # list invalid lines; --fix repairs None/True/False
@@ -64,23 +66,41 @@ def check(run, fix):
         shutil.copy(path, bak)
         open(path, "w", encoding="utf-8", newline="\n").write("\n".join(out) + "\n")
         print("repaired, backup", bak)
-    return 1 if bad and not fix else 0
+    if fix:
+        return 1 if any(k == "NOT repairable" for _, k in bad) else 0
+    return 1 if bad else 0
+
+
+def as_int(v, what):
+    try:
+        return int(v)
+    except ValueError:
+        sys.exit(f"editlog: {what} must be a whole number, got {v!r}\n{__doc__}")
 
 
 def main(argv):
     if len(argv) < 2:
         sys.exit(__doc__)
     run, cmd, rest = argv[0], argv[1], argv[2:]
+    if cmd == "init":
+        if not run.strip() or not os.path.isabs(run):
+            sys.exit(f"editlog init: RUN must be an absolute path, got {run!r} (set RUN in this Bash call)")
+        os.makedirs(run, exist_ok=True)
+        path = os.path.join(run, "edits.jsonl")
+        if not os.path.exists(path):
+            open(path, "a", encoding="utf-8").close()
+        print(f"run folder ready: {run}")
+        return
     # An unset $RUN arrives as "" (or the command name shifts into its place): never write elsewhere.
     if not run.strip() or not os.path.isdir(run) or not (
             os.path.exists(os.path.join(run, "log.jsonl")) or os.path.exists(os.path.join(run, "edits.jsonl"))):
-        sys.exit(f"editlog: RUN is not a run folder: {run!r} (set RUN in this Bash call; for a new run folder, create an empty edits.jsonl in it first)")
+        sys.exit(f"editlog: RUN is not a run folder: {run!r} (set RUN in this Bash call; for a library with no cull run, run `editlog.py RUN init` once)")
     if cmd == "start" and len(rest) == 4:
         pid, cursor, masks, rnd = rest
-        append(run, {"id": int(pid), "cursor": None if cursor == "null" else int(cursor),
-                     "masksBefore": int(masks), "round": rnd})
+        append(run, {"id": as_int(pid, "ID"), "cursor": None if cursor == "null" else as_int(cursor, "CURSOR"),
+                     "masksBefore": as_int(masks, "MASKS"), "round": rnd})
     elif cmd == "done" and len(rest) >= 2:
-        obj = {"id": int(rest[0]), "done": True, "round": rest[1]}
+        obj = {"id": as_int(rest[0], "ID"), "done": True, "round": rest[1]}
         for kv in rest[2:]:
             k, _, v = kv.partition("=")
             obj[k] = num(v)

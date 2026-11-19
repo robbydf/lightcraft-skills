@@ -309,7 +309,7 @@ a time, and checks their results.
        `$SP/panelN-key.txt`, outside the photos folder.
     2. **Start 3 fresh `sonnet` subagents in parallel** (run in the background). They only read images,
        so they don't need LightCraft and can run at the same time. Prompt:
-       > Read `<SK>/panel-brief.md` and follow it exactly, with PHOTOS=`<SP>/panelN/photos`, SCRIPTS=`<$LC_SCRIPTS as an absolute path>` and
+       > Read `<SK>/panel-brief.md` and follow it exactly, with PHOTOS=`<SP>/panelN/photos`, SCRIPTS=`<$LC_SCRIPTS as an absolute path>`, PY=`<$LC_PY>` and
        > OUT=`<SP>/panelN/<role name>`. Your role name: `<name>`. Your ROLE: `<role>`.
 
        The 3 roles:
@@ -325,8 +325,11 @@ a time, and checks their results.
          (the reason field may never be empty: a card that only says "panel voted 2-1 to drop" gives
          the user nothing to judge).
        - The panel never rejects. Rejects follow only the reject test.
-    4. **Log** each change with `runstate.py log`, reason "panel 3-0 keep" or similar, then run
-       `check`.
+    4. **Log** the panel's changes with `runstate.py amend` (the groups are already logged, and `log`
+       refuses a group twice), one call per panel with every change and its reason:
+       `python -I "$LC_SCRIPTS/runstate.py" amend "$RUN" '{"ids":[412,415],"picks":[412],"unpick":[415],"reason":{"412":"panel 3-0 keep","415":"panel 3-0 drop"}}'`.
+       `picks` become rating 3; `unpick` takes the stars off this run's own picks. Then run `check`:
+       a panel change made in LightCraft but not amended shows as a MISMATCH.
 
     Test result (23 photos one user judged):
     - The panel matched 16 of the user's 18 calls, with 0 wrong drops.

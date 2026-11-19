@@ -27,7 +27,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from lcargs import fix_argv  # noqa: E402
-from lcimg import Image, ImageDraw, box, files, font, gray, load_rgb, np, parse_region, save  # noqa: E402
+from lcimg import Image, ImageDraw, box, files, font, gray, load_rgb, np, parse_region, save, native_path  # noqa: E402
 
 MODES = ("sharp", "tilt", "mean", "clip", "crops", "sheet", "batch", "grid")
 
@@ -171,7 +171,7 @@ def batch(listfile):
             if len(p) < 2:
                 lines.append(f"line {ln}: need <image>|x0,x1,y0,y1[|label]")
                 continue
-            img = p[0].strip()
+            img = native_path(p[0].strip())
             if not os.path.isabs(img):
                 img = os.path.join(base, img)
             if not os.path.isfile(img):

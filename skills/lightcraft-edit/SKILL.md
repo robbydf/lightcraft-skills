@@ -13,6 +13,11 @@ Edit only the photos the user names, or a scene type they approved for a batch. 
 
 - LightCraft must be running with the bridge: use the `lightcraft-mcp` skill (`start`). Keep the window
   un-minimized, or requests fail with "the app drew no frame".
+- **"lost the LightCraft app … control channel closed before a complete reply line"** twice in a row
+  (a minute apart) means LightCraft has died, not that it is busy: in testing, a GPU driver reset
+  stopped its window while an error box kept the process alive. Workers stop and report it. The
+  orchestrator tells the user and restarts it only on their yes (`lightcraft-mcp` `stop -Force`, then
+  `start`); edits made before the crash were kept. Then re-read each open photo with `develop.get`.
 - Run CLI commands **from Bash**: Windows PowerShell 5.1 strips the `"` inside JSON arguments.
   Variables don't persist between calls, so start every Bash call with:
   ```bash
@@ -22,7 +27,8 @@ Edit only the photos the user names, or a scene type they approved for a batch. 
   ```
   Repeat all three lines in **every** Bash call, `RUN` and `SP` included: a new call starts with
   them unset. `editlog.py` refuses to run without a valid `RUN`; in testing, an unset `RUN` once
-  wrote the edit log into the current folder.
+  wrote the edit log into the current folder. A library with no cull run has no run folder yet:
+  create it once with `python -I "$LC_SCRIPTS/editlog.py" "$RUN" init` before the first `start`.
   If `lc-env.sh` can't find LightCraft, ask the user for the install folder and write
   `LIGHTCRAFT_DIR=<folder>` to `~/.claude/lightcraft/config.env`.
   - Use forward slashes in `path=`.
@@ -31,6 +37,11 @@ Edit only the photos the user names, or a scene type they approved for a batch. 
     (`python -I script.py "$RUN"`). Never write them inside Python code (a heredoc or `python -c`):
     there use a Windows-style path (`cygpath -m "$RUN"` gives `C:/Users/...`). Never call `$CLI` from
     a Python subprocess; run CLI commands from Bash. In testing, a worker hit both.
+  - **Two kinds of scripts:** the standard-library ones (`editlog.py`, `runstate.py`, `looks.py`,
+    `people.py`, `review.py`, `bursts.py`) run as `python -I "$LC_SCRIPTS/<name>.py"`. The image
+    helpers (`measure.py`, `lfit.py`, `rgb.py`, `sbs.py`, `tiltprev.py`) run **only** through `M` and
+    `LCX`, which use `"$LC_PY" -E`: `-I` hides Pillow and numpy installed with `pip --user`, and the
+    helper then reports them missing.
   - **Quote `"$CLI"` everywhere**, including inside loops and background jobs: its path has spaces,
     and an unquoted `$CLI` in a background loop died without a word in testing.
   - **Deleting files:** write `rm -f "${SP:?}"/name`, never a bare `"$SP"/*` (the safety check blocks
@@ -44,9 +55,10 @@ Edit only the photos the user names, or a scene type they approved for a batch. 
     - `crops`: at most 4 files.
     - `sheet`: a contact sheet of up to 12 whole frames, `-Cols` across (default 3), each labelled
       with its file name. 9 per sheet reads well: classify 25 frames in 3 Reads, e.g.
-      `M sheet $(ls "$SP"/before1k/*.jpg | head -9) -Out "$SP/sheet1.png"`.
+      `f=("$SP"/before1k/*.jpg); M sheet "${f[@]:0:9}" -Out "$SP/sheet1.png"` (an array keeps
+      paths with spaces whole).
     - `batch`: one list file, one measurement per line: `<image>|x0,x1,y0,y1[|label]` (relative
-      images are read from the list's folder). Prints mean, blown and crushed for every line in a
+      images are read from the list's folder; `/c/...` paths are converted on Windows). Prints mean, blown and crushed for every line in a
       single Python start. Use it for before/after numbers on a whole chunk: about 100 separate
       `M` calls were the slowest part of a chunk in testing.
     - `grid`.
@@ -58,7 +70,11 @@ Edit only the photos the user names, or a scene type they approved for a batch. 
   - `enabled: false` with `reason` "disabled by the GPU rendering preference": the GPU is off by the
     user's setting. **Ask the user** whether you (or a worker) may turn it on for this run, and say why:
     AI Denoise on the CPU took about 70 s per frame in testing, and on an entry-level GPU (MX130) about
-    20 s. It's their setting, so never turn it on without a yes.
+    20 s. Also say the risk: on that MX130, GPU rendering plus a 6000 px export of a denoised photo
+    hit the Windows GPU watchdog (a driver reset), and LightCraft died mid-run. It's their setting,
+    so never turn it on without a yes.
+  - **While GPU rendering is on, export at most `longEdge=4000`** on an entry-level GPU (2–4 GB, such
+    as the MX130). The 100 % checks below then use 4000 px renders; say so in the report.
   - Any other reason (no adapter, a driver error): don't ask; denoise runs on the CPU. Say so once.
   - On a yes: `"$CLI" run --connect app.gpu enabled=true wait=true`. It must return
     `available: true` with an `adapter`; if not, set it back with `app.gpu enabled=false`, tell the
@@ -92,6 +108,9 @@ Edit only the photos the user names, or a scene type they approved for a batch. 
 
 ## Before the first change to a photo
 
+0. Once per session (or batch), before the first edit: save the marks, for the check at the end
+   (see "Marks" under Batches): `"$CLI" run --connect catalog.query limit=100000 > "$SP/marks-before.json"`.
+
 1. Record its history: `"$CLI" run --connect history.list id=ID` gives `cursor`, which is `null` if it
    was never edited.
 2. Note its masks: `get_develop {id}` → `masks`.
@@ -112,7 +131,12 @@ Edit only the photos the user names, or a scene type they approved for a batch. 
 - If `cursor` was `null`: `develop.reset 'ids=[ID]'`. This is allowed **only** then, because it returns
   the photo to unedited. Check `enhance.denoise_on` afterwards, and turn denoise off with
   `denoise.toggle id=ID enabled=false` if it is still on.
-- Use `edit.undo` only immediately after a single step of your own.
+- **Never use `edit.undo` or `edit.redo`.** They act on the library's global history, not on one
+  photo: in testing, an undo after a step that recorded nothing removed another photo's step. To take
+  back a step, read `history.list id=ID` (its `cursor`, C) before the step, then
+  `library.select 'ids=[ID]' history.restore index=C`.
+- A step that returns `changed:false`, or is rejected, recorded nothing: there is nothing to take
+  back, so do nothing.
 
 ## Per-photo order
 
@@ -127,7 +151,9 @@ bash "$LC_SCRIPTS/export-ids.sh" "$SP/before1k" before 1000 501 502 503 504 505
 ```
 `export-ids.sh` names each file `ID-SUFFIX.jpg`: LightCraft has no id token in export names (only
 the camera file name), and the helper maps the result's `files` list, which comes in the order of the
-ids. Use it for every export of a known id (befores, afters, full-size denoise checks). The 1000 px
+ids. Use it for every export of a known id (befores, afters, full-size denoise checks). Ids that
+share a camera file name (virtual copies, two cameras) are exported again one at a time, which costs
+one extra export each: keep such ids out of a full call of 5–6. The 1000 px
 files are the classification and clipping-check renders.
 - **Never pipe `app.export` into `head`** or another command that closes early: the export broke
   with "os error 232". Redirect the result to a file instead.
@@ -465,7 +491,7 @@ coordinates from it: fractions of the full frame, as the grid labels show.
 background, with at least 30 % of the crop being background. Crops placed inside the subject showed no
 halo in testing even when there was one.
 - **Check at true 100 %, not on a 2000 px render,** for the strongest mask in each batch and for any
-  mask with exposure above 0.6: export that photo at `longEdge=6000` (one per call), and centre the
+  mask with exposure above 0.6: export that photo at `longEdge=6000` (4000 while GPU rendering is on, see Setup; one per call), and centre the
   crop where dark hair meets a dark background (foliage, shade). That edge is where halos show first.
   In testing, 2000 px edge crops passed five portraits whose halo the user saw on the review page.
 
@@ -520,7 +546,7 @@ nearby texture.
      Fix a bad patch with `spot.update`, or `spot.delete index=N` and redo it.
 3. **Never paint over the subject.** Where a bystander overlaps the subject's outline, stop the spot
    a little short and accept a faint trace.
-4. **Check** with a 2000 px before | after (`sbs.py`) of the area, and at 100 % on a 6000 px export
+4. **Check** with a 2000 px before | after (`sbs.py`) of the area, and at 100 % on a 6000 px export (4000 while GPU rendering is on, see Setup)
    (one file per call; it takes 25–30 s, and a slow one made the app unreachable for a few minutes).
 5. **Report honestly:**
    - Small or blurred figures against repeating texture (bamboo, foliage) come out clean at normal
@@ -656,6 +682,8 @@ Follow `straighten` in the preferences:
      (0.33 / -1.09 / 4.04° on one night facade, with few inliers). There, try
      `library.select 'ids=[ID]' crop.autoStraighten` first, re-export, and check it with `lfit.py`.
      In testing it gave -2.44° and the lines then measured level; the user approved it.
+     Read the `history.list` cursor before it, so it can be taken back with `history.restore` (see
+     Revert). If it returns `changed:false`, it did nothing: don't undo anything.
    - **Light-show and night frames still get this check.** A floodlit castle against a black sky is
      not exempt: in testing the user asked for alignments on 4 castle frames that had none.
    - **When the measurements can't settle it** (tapered towers, `lfit.py` and `crop.autoStraighten`
@@ -690,7 +718,8 @@ Follow `straighten` in the preferences:
      accepted 2.5° on two park views with a 5–6° slope.
    - Keep `geometry.upright mode=auto` out of the default path: it once rotated 4.1° and left pillars
      leaning 0.6°.
-4. Keep the correction only if it measures better. Otherwise revert and add a `decide` with the
+4. Keep the correction only if it measures better. Otherwise take it back with `history.restore` to
+   the cursor read before it (never `edit.undo`), and add a `decide` with the
    numbers, and a test render if one exists.
 5. If you keep a correction, run `set_develop {id, settings: {geometry: {constrain_crop: true}}}` and
    say what the crop cuts off. If it cuts into the main subject, add a `decide`.
@@ -765,6 +794,10 @@ Subagents aren't told the skill's base directory, so list in the brief:
   use fewer tokens, or give better results. The orchestrator collects them for the next skill update;
 - the review material and `review.jsonl` (see Showing results);
 - the report: at most 15–25 lines, with no images;
+- that the worker never uses `edit.undo`/`edit.redo` (global, not per photo; take steps back with
+  `history.restore`, see Revert), and runs image helpers only through `M`/`LCX`, never `python -I`;
+- the largest export it may make: `longEdge` 6000, or 4000 when GPU rendering is on with an
+  entry-level GPU (see Setup);
 - that the worker never changes `app.gpu` or `denoise.settings`, and reports the denoise device
   (`denoise-wait.sh` prints it);
 - **finish with nothing running:** no background shell job of its own, no export, `denoise.status`
@@ -804,12 +837,15 @@ chunk must stop:
   - **Take the ids from the list you gave the worker,** written to a file when you launch it. In
     testing, a check read an older chunk file after the day was re-split and scanned the wrong ids.
   - Workers run the same check on their own ids before they report.
-- **Cull marks:** editing must not change any rating or flag. Never skip this check; it must report
-  0 mismatches and 0 changes outside the run:
+- **Marks:** editing must not change any rating or flag. Before the first edit of the batch, save
+  `"$CLI" run --connect catalog.query limit=100000 > "$SP/marks-before.json"`. Never skip this check;
+  it must report 0 marks changed for the batch's ids:
   ```bash
   "$CLI" run --connect catalog.query limit=100000 > "$SP/now.json"
-  python -I "$LC_SCRIPTS/runstate.py" check "$RUN" "$SP/now.json"
+  python -I "$LC_SCRIPTS/runstate.py" marks "$SP/marks-before.json" "$SP/now.json" --ids <the batch's ids>
   ```
+  This works with or without a cull run. With one, `runstate.py check "$RUN" "$SP/now.json"` is extra
+  information only: it also lists ratings the user changed since the cull, which aren't the edit's.
 - Look at a few results yourself before sending them.
 
 ## Showing results to the user
@@ -867,7 +903,7 @@ downscaled before/after sheet can't be zoomed, so the user can't judge noise or 
   file-sending tool, listing the ids in order, and ask for verdicts by id.
 - **The overall look:** before/after pairs at about 1000 px.
 - **Noise, sharpness and mask edges:** send **100 % crops cut from a full-size export**
-  (`longEdge=6000`, then `M crops -Region <~0.2 × 0.2>`).
+  (`longEdge=6000`, or 4000 while GPU rendering is on, then `M crops -Region <~0.2 × 0.2>`).
   - Stack the versions being compared.
   - **Every version must have identical develop settings except the one being compared.** Make them
     in one sitting by changing only that setting between exports.
@@ -910,7 +946,7 @@ Never claim a photo is brighter, cleaner or straight without a measurement.
 - **Apply develop values with the MCP `set_develop` tool.** The CLI `develop.set id=ID …` returns
   `ok` but doesn't apply the values. Check with `develop.get` if in doubt.
 - Exports reflect the current develop state, including a +3 coverage check left in place.
-- **Full-size exports** (`longEdge=6000`) take 25–30 s each. Export 1–2 per call: a call of 8 timed
+- **Full-size exports** (`longEdge=6000`; at most 4000 while GPU rendering is on, see Setup) take 25–30 s each. Export 1–2 per call: a call of 8 timed
   out. The export then kept running in the background, and for about a minute every request failed
   with "drew no frame". Wait for `library.state` to answer `"ok":true` before the next call.
 - Mask commands take the mask's `id` (from `activeMask` or `masks[].id`, starting at 1), not its
