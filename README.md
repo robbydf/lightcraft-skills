@@ -78,6 +78,8 @@ scripts/
   bursts.py runstate.py review.py   burst grouping, durable run state, review page
   editlog.py                        valid edits.jsonl lines (start, done, check --fix)
   people.py                         photo -> named people map from LightCraft face naming
+  looks.py                          look presets vs preferences; end-of-chunk develop check
+  denoise-wait.sh                   wait for the denoise queue, write a marker (device, time)
 preferences.example.md
 ```
 

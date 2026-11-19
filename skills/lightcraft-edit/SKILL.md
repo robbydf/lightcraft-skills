@@ -31,6 +31,12 @@ Edit only the photos the user names, or a scene type they approved for a batch. 
     (`python -I script.py "$RUN"`). Never write them inside Python code (a heredoc or `python -c`):
     there use a Windows-style path (`cygpath -m "$RUN"` gives `C:/Users/...`). Never call `$CLI` from
     a Python subprocess; run CLI commands from Bash. In testing, a worker hit both.
+  - **Quote `"$CLI"` everywhere**, including inside loops and background jobs: its path has spaces,
+    and an unquoted `$CLI` in a background loop died without a word in testing.
+  - **Deleting files:** write `rm -f "${SP:?}"/name`, never a bare `"$SP"/*` (the safety check blocks
+    it), and never inside a background `bash -c`.
+  - **Files written from Python on Windows** get CR line endings: open them with `newline='\n'`, or
+    strip with `tr -d '\r'`, before another script reads them line by line.
   - `M` modes:
     - `mean`: brightness 0–255.
     - `clip`: % blown (any channel at 255) and % crushed (all channels at 0).
@@ -46,6 +52,19 @@ Edit only the photos the user names, or a scene type they approved for a batch. 
     - `grid`.
   - `-Region x0,x1,y0,y1` takes fractions of the frame, and `-Out` must end in `.png`. `M mean`
     always needs `-Region` (use `0,1,0,1` for the whole frame).
+- **GPU rendering (once per run, before the first denoise; the orchestrator, never a worker).** Run
+  `"$CLI" run --connect app.gpu wait=false`.
+  - `enabled: true`: nothing to do.
+  - `enabled: false` with `reason` "disabled by the GPU rendering preference": the GPU is off by the
+    user's setting. **Ask the user** whether you (or a worker) may turn it on for this run, and say why:
+    AI Denoise on the CPU took about 70 s per frame in testing, and on an entry-level GPU (MX130) about
+    20 s. It's their setting, so never turn it on without a yes.
+  - Any other reason (no adapter, a driver error): don't ask; denoise runs on the CPU. Say so once.
+  - On a yes: `"$CLI" run --connect app.gpu enabled=true wait=true`. It must return
+    `available: true` with an `adapter`; if not, set it back with `app.gpu enabled=false`, tell the
+    user the `reason`, and go on with the CPU. `denoise.status` shows `device: {kind: "pending"}`
+    until the next denoise job, then `kind: "gpu"`; check it on the first job and report the device.
+  - Workers never change `app.gpu` or `denoise.settings`; put that in the brief.
 - **Preferences:** read `$PREFS` (`~/.claude/lightcraft/preferences.md`) before the first edit.
   - If it doesn't exist, copy `preferences.example.md` from the plugin root there, and tell the user
     that every look and value is still unapproved.
@@ -97,7 +116,10 @@ Edit only the photos the user names, or a scene type they approved for a batch. 
 ## Per-photo order
 
 **Batch the exports first (speed).** Exports cost about 15 s each at 2000 px, so before editing any
-photo of a chunk, export every unedited photo in calls of 5–6 ids (more passes the 120 s tool limit):
+photo of a chunk, export every unedited photo in calls of 5–6 ids (more passes the 120 s tool limit).
+- **Export the befores before applying any look,** preset included. In testing, a worker applied the
+  preset to the whole chunk first and had to reset every photo and export again.
+- **One export batch per tool call.** Four batches in one call ran past 120 s.
 ```bash
 "$CLI" run --connect app.export 'ids=[501,502,503,504,505]' dir="$SP/before2k" longEdge=2000 format=jpeg naming='{name}' conflict=overwrite
 "$CLI" run --connect app.export 'ids=[501,502,503,504,505]' dir="$SP/before1k" longEdge=1000 format=jpeg naming='{name}' conflict=overwrite
@@ -176,8 +198,23 @@ each:
    `preset.saveRecipe name="LC look.night" group="lightcraft" 'recipe=[{"id":"light.shadows","value":30},…]'`.
    - A recipe takes plain develop controls only, with no white balance, geometry or crop. Set any of
      those with `set_develop` per photo.
-   - Saving the same recipe under the same name returns the existing preset, so this is safe to repeat.
-     Use `presets.list` to find its id.
+   - **Check the presets against the preferences at the start of every run** (the preferences may
+     have changed since they were saved):
+     ```bash
+     "$CLI" run --connect preset.export path="$SP/looks.lcpreset" group=lightcraft
+     python -I "$LC_SCRIPTS/looks.py" presets "$PREFS" "$SP/looks.lcpreset"
+     ```
+     It prints `OK`, `MISSING` (save it with the recipe it prints) or `DIFF` with the changed values.
+   - **LightCraft never updates a preset in place.** Saving a changed recipe under the same name
+     makes a second preset with the same name and the id `…-2` (tested), and anything still holding
+     the old id keeps applying the old values. On a `DIFF`: `preset.delete id=<old id>`, save the
+     recipe again, take the new id from the result, run `looks.py presets` again until every look is
+     `OK`, and give workers the new id.
+   - **Photos already edited keep the old values** (a preset copies values; it is not a link). When a
+     look changed, list the photos edited with it in earlier rounds (`edits.jsonl`, `look=` on the
+     done lines) and offer the user a redo; never redo them unasked.
+   - Saving an unchanged recipe under the same name returns the existing preset. Use `presets.list`
+     to find an id.
 2. Record each photo's history cursor first, as usual (see "Before the first change to a photo").
    Then apply the look to every photo of that look in the chunk with one call:
    `preset.apply id=<presetId> 'ids=[501,502,503,…]'`.
@@ -351,6 +388,9 @@ than the background (Subject lift).
 Export `library.select 'ids=[ID]' app.export path="$SP/ID.jpg" longEdge=1500`, then run
 `M grid "$SP/ID.jpg" -Region <around subject> -Out "$SP/ID-grid.png"`. Read the PNG and take the
 coordinates from it: fractions of the full frame, as the grid labels show.
+- **Read x and y from the tick labels, not by eye from the cell count:** `-Region` is `x0,x1,y0,y1`,
+  and the grid labels are full-frame fractions. In testing, first readings of 3 face boxes were off.
+  Check a face box with `M mean` before using its numbers.
 
 ### Path A: SAM 3 mask
 
@@ -372,6 +412,9 @@ coordinates from it: fractions of the full frame, as the grid labels show.
        prompt names clothing.
      - Exclude points (`mask.objectPoint`) **don't work** on a prompt mask ("the mask has no Object
        selection"). Fix spill by deleting the mask and using a more specific prompt or clicked points.
+   - **Small faces in a crowd** (a portrait in front of a busy night scene, other people in similar
+     clothes nearby): go straight to clicked points. In testing, "woman in white top" also took a
+     girl in pink behind her, and clicked points were faster and cleaner on 4 portraits.
    - **Fallback: clicked points** read from a grid (see "Picking points"). Use it when a prompt finds
      nothing, catches the wrong people, or fails the coverage check twice:
      `mask.add kind=object 'points=[[x,y],[x,y]]' 'exclude=[[x,y]]' name=Subject`.
@@ -379,8 +422,10 @@ coordinates from it: fractions of the full frame, as the grid labels show.
    - One obvious person or animal: `library.select 'ids=[ID]' mask.add kind=subject name=Subject`.
    - Optional, for hair and fine edges: `mask.refineDetail id=N`. It runs in the background, so poll
      `segment.model.status` until `busy: false`.
-3. **Coverage check:** set `mask.adjust id=N 'values={"exposure":3}'`, export and read it. The subject
-   should be blown out and the background unchanged.
+3. **Coverage check:** first poll `get_develop {id}` until the mask's component has its `seg` data:
+   `mask.add` can still be pending while the app is analyzing, and an adjust made before the data
+   exists is lost (tested). Then set `mask.adjust id=N 'values={"exposure":3}'`, export and read it.
+   The subject should be blown out and the background unchanged.
    - Where +3 is hard to read (it often only brightens the subject a little), use a colour overlay instead:
      `mask.adjust id=N 'values={"tint":100,"saturation":100,"exposure":1}'`. Everything masked turns
      magenta. Set the real values afterwards, the same as after +3.
@@ -519,15 +564,22 @@ ISO `denoise.iso_candidate` (default 3200) or above makes a photo a **candidate*
    - On a night portrait at ISO 6400, 50 % left grain in the sky, 65 % was clean, and 75 % made the skin waxy.
 5. **Render it:** run `denoise.queue 'ids=[…]'` after every amount change. The cached picture is
    for the old amount. Then poll `denoise.status` until `queued` is 0 and `running` is null.
-   - **Wait in one background loop, not in repeated foreground calls (tokens):** run a Bash loop in
-     the background that polls `denoise.status` every 20 s, and when `queued` is 0 and `running` is
-     null writes a marker file (`touch "$SP/denoise.done"`) and exits. Do other work (numbers, review
-     lines) meanwhile. In testing, workers spent many turns on 180 s foreground polls. The loop must
-     end before the report (see "finish with nothing running").
-   - **A plain `sleep N` in a foreground call is blocked** for workers. To wait for the marker, use
-     one call with a loop: `until [ -f "$SP/denoise.done" ]; do sleep 5; done` (with a `timeout`
-     that covers the wait), then delete the marker.
-   - The built-in denoiser on the GPU takes about 1 minute per photo, and it needs no download.
+   - **Wait with the helper, in the background, not in repeated foreground calls (tokens):**
+     ```bash
+     rm -f "${SP:?}/denoise.done"
+     bash "$LC_SCRIPTS/denoise-wait.sh" "$SP"      # as a background tool call; polls every 20 s
+     # ... measure the frames that don't need denoise, write review lines ...
+     until [ -f "$SP/denoise.done" ]; do sleep 5; done; cat "$SP/denoise.done"; rm -f "${SP:?}/denoise.done"
+     ```
+     The marker says `done after Ns on gpu|cpu` (or `TIMEOUT …` after an hour). Don't hand-write the
+     loop: in testing, an unquoted `$CLI` killed one silently. In testing, workers also spent many
+     turns on 180 s foreground polls. The helper must have exited before the report (see "finish
+     with nothing running").
+   - **A plain `sleep N` in a foreground call is blocked** for workers; the `until` loop above (with
+     a `timeout` that covers the wait) is the way to wait.
+   - **Speed:** on an entry-level GPU (MX130) 21 frames took about 7 minutes (about 20 s each); on the
+     CPU 22 frames took about 25 minutes. If it runs on the CPU, see GPU rendering in Setup. The
+     built-in denoiser needs no download.
    - **On the CPU it is much slower.** LightCraft can stop answering ("drew no frame") for 5–6
      minutes while it runs. Wait and keep polling `denoise.status`. Don't start another export, mask
      or denoise job, and don't restart LightCraft. In testing it always recovered by itself.
@@ -537,6 +589,10 @@ ISO `denoise.iso_candidate` (default 3200) or above makes a photo a **candidate*
 ## Clipping check
 
 Run `M clip` on the 1000 px render before any edit and on the after render.
+- **On a denoised photo, measure the after render only once denoise has finished** (the
+  `denoise-wait.sh` marker, see AI Denoise). AI Denoise turns noisy near-black into exact 0: in
+  testing, crushed on a castle rose 4–5 points after denoise that the before-denoise render didn't
+  show. Raising blacks to 0 barely changed it (5.35 → 5.25), so there, flag it, don't chase it.
 - If **blown** rose by more than 0.5 percentage points, lower `light.highlights` by 15 and check
   again.
 - If **crushed** rose by more than 0.5 points, raise `light.blacks` by 8 and check again.
@@ -553,13 +609,15 @@ Run `M clip` on the 1000 px render before any edit and on the after render.
   - If crushed on the subject still rose more than 2 points at blacks 0, add a "Flagged edits" card
     with the numbers. Never raise exposure on a light show to fix it.
   - **Blown on a light show:** most blown pixels are lamps, bulbs and saturated blue or purple light,
-    which `light.highlights` doesn't bring back. Try highlights -15 **once**; if blown on the subject
+    which `light.highlights` doesn't bring back. Try highlights 15 lower than the look's value
+    **once** (the light-show look is at -60, so -75); if blown on the subject
     didn't fall by at least 0.3 points, put the value back and add a "Flagged edits" card with the
     numbers. In testing, highlights -75 left blown at 4.24 % against 4.25 %.
-  - **Subject got darker:** if the subject's mean after the look is under 25 and lower than before,
-    list it under "Needs the user" with both means (it may need the "brighter" fix, see Global
-    exposure boosts), and keep its 2000 px before. In testing, the look took a floodlit castle from
-    24.3 to 22.1.
+  - **Subject got darker:** if the subject's mean after the look is under 20 **and** more than 10 %
+    lower than before, list it under "Needs the user" with both means (it may need the "brighter"
+    fix, see Global exposure boosts), and keep its 2000 px before. A small drop is normal: the user
+    called a floodlit castle that went from 24.3 to 22.1 fine, and the light-show look takes dim
+    frames with a navy sky down hard (14.7 → 9.2).
 - Each fix runs at most 2 times; then stop and report the numbers.
 
 ## Straightening
@@ -675,13 +733,16 @@ Subagents aren't told the skill's base directory, so list in the brief:
   use fewer tokens, or give better results. The orchestrator collects them for the next skill update;
 - the review material and `review.jsonl` (see Showing results);
 - the report: at most 15–25 lines, with no images;
+- that the worker never changes `app.gpu` or `denoise.settings`, and reports the denoise device
+  (`denoise-wait.sh` prints it);
 - **finish with nothing running:** no background shell job of its own, no export, `denoise.status`
   with `queued` 0 and `running` null, and `segment.model.status` with `busy: false`. Say so in the
   report. In testing, one worker reported while its own background job was still running.
 
 **Time:** a chunk of 20 took 30–55 minutes on an entry-level laptop GPU. A plain photo takes about
 1 minute; a masked one 2–10 minutes (each SAM 3 segmentation or added point takes about 60 s); about
-1 more minute per denoised photo. Tell the user the estimate up front.
+20 s more per denoised photo on the GPU, about 70 s on the CPU. In testing, a chunk of 22 fireworks
+frames with 4 masked portraits took 40 minutes with GPU denoise. Tell the user the estimate up front.
 
 **Stopping a chunk, or pausing for the user.** When the user wants LightCraft back mid-chunk, or a
 chunk must stop:
@@ -696,12 +757,21 @@ chunk must stop:
 **The orchestrator, when the worker reports:**
 - Stop the worker if it says background work is still running (one worker kept running after its
   report).
-- **End-of-batch check, for every edited id:** run `develop.get`. Fail if any mask has
-  `exposure >= 2` or `amount` other than 100.
+- **End-of-batch check, for every edited id**, with the helper (it reads keys with `.get()`, so a
+  missing `denoise_on` reads as off):
+  ```bash
+  mkdir -p "$SP/dev"; for id in <the chunk's ids>; do "$CLI" run --connect develop.get id=$id > "$SP/dev/$id.json"; done
+  python -I "$LC_SCRIPTS/looks.py" check "$PREFS" "$SP/dev"
+  ```
+  It names each photo's look and fails a mask with `exposure >= 2`, `amount` other than 100, an
+  overlay left on, or no values, and denoise stacked with the look's full noise reduction.
   - The daylight cap (`lift.daylight_mask_max`, shadows 15) applies only to photos with the
     daylight look.
   - A mask on a photo with `look.night` or `look.light_show` follows the night ladder: shadows up to
     `lift.shadows_max`, and exposure up to `lift.mask_limit`. Don't flag it as over the daylight cap.
+  - **Take the ids from the list you gave the worker,** written to a file when you launch it. In
+    testing, a check read an older chunk file after the day was re-split and scanned the wrong ids.
+  - Workers run the same check on their own ids before they report.
 - **Cull marks:** editing must not change any rating or flag. Never skip this check; it must report
   0 mismatches and 0 changes outside the run:
   ```bash
@@ -730,6 +800,16 @@ Change → ask what to change if the note doesn't say).
      "Daylight look"). For a photo left unedited, write "Unedited, no look yet", show a sample of the
      proposed look as a crop, and add a `decide`. In testing, the user couldn't tell what the "after"
      of an unedited photo was.
+   - **Every photo listed under "Needs the user" is covered by a card with a `decide`** (group
+     "Needs the user"): its own card, or the venue card below. In testing, a worker kept a photo's
+     before and after but wrote no card, so the user never saw the question.
+   - **One card per venue for a repeated question.** When 3 or more frames of one venue need the same
+     question (the castle stays dark: brighten it?), make **one** card: the darkest frame's 2000 px
+     before/after and sbs, its id as the card's `id`, an `M sheet` of the afters of the others as a
+     crop, `changes` listing every id with its subject mean, and the decide "for all N frames"
+     (options "Fine as is", "Brighten all", "Brighten some (note the ids)"). In testing, a per-frame
+     card for 23 dim castle frames meant 23 near-identical questions. Frames with their own extra
+     problem (a flag) still get their own card.
    - Add `decide` (and a `group`) only when the user must choose: a proposed look, a lift stopped
      at its limit short of the target, a failed mask, a crop over 5 % (over 12 % for a keystone `geometry.upright`
      correction: the user accepted 8–12 % per edge on four street views), a clip rule that stopped, a failed straightening, a
@@ -785,7 +865,9 @@ Never claim a photo is brighter, cleaner or straight without a measurement.
   stores the mode.
 - `set_develop` takes `values` (slider ids) and `settings` (nested, e.g. `{enhance: {denoise: 50}}`)
   in one call. The `settings` part is applied without any acknowledgement in the result, so check it
-  with `develop.get` once per chunk.
+  with `develop.get` once per chunk (`looks.py check` reads the dumps).
+- `develop.get` leaves out `enhance.denoise_on` when denoise is off: read it with `.get()`, never
+  `["denoise_on"]`.
 - **Apply develop values with the MCP `set_develop` tool.** The CLI `develop.set id=ID …` returns
   `ok` but doesn't apply the values. Check with `develop.get` if in doubt.
 - Exports reflect the current develop state, including a +3 coverage check left in place.
