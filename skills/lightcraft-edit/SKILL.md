@@ -23,11 +23,23 @@ Edit only the photos the user names, or a scene type they approved for a batch. 
   If `lc-env.sh` can't find LightCraft, ask the user for the install folder and write
   `LIGHTCRAFT_DIR=<folder>` to `~/.claude/lightcraft/config.env`.
   - Use forward slashes in `path=`.
+  - **Paths in Python:** `$RUN`, `$SP`, `$CLI` and `$LC_SCRIPTS` may be msys paths (`/c/Users/...`).
+    Bash converts them only when they are passed as **arguments** to a program, so pass them that way
+    (`python -I script.py "$RUN"`). Never write them inside Python code (a heredoc or `python -c`):
+    there use a Windows-style path (`cygpath -m "$RUN"` gives `C:/Users/...`). Never call `$CLI` from
+    a Python subprocess; run CLI commands from Bash. In testing, a worker hit both.
   - `M` modes:
     - `mean`: brightness 0–255.
     - `clip`: % blown (any channel at 255) and % crushed (all channels at 0).
     - `tilt`.
     - `crops`: at most 4 files.
+    - `sheet`: a contact sheet of up to 12 whole frames, `-Cols` across (default 3), each labelled
+      with its file name. 9 per sheet reads well: classify 25 frames in 3 Reads, e.g.
+      `M sheet $(ls "$SP"/before1k/*.jpg | head -9) -Out "$SP/sheet1.png"`.
+    - `batch`: one list file, one measurement per line: `<image>|x0,x1,y0,y1[|label]` (relative
+      images are read from the list's folder). Prints mean, blown and crushed for every line in a
+      single PowerShell start. Use it for before/after numbers on a whole chunk: about 100 separate
+      `M` calls were the slowest part of a chunk in testing.
     - `grid`.
   - `-Region x0,x1,y0,y1` takes fractions of the frame, and `-Out` must end in `.png`. `M mean`
     always needs `-Region` (use `0,1,0,1` for the whole frame).
@@ -91,6 +103,9 @@ Then rename `before2k/<file>.jpg` to `ID-before.jpg`. The 1000 px files are the 
 clipping-check renders. Never reset an edited photo just to get a "before".
 - **2000 px befores are required** for every review-list id and every photo that isn't plain (own
   people, a denoise candidate, a tilt). Plain photos may skip the 2000 px before to save time.
+- **Also keep the 2000 px before of every photo the report lists under "Needs the user"** (a dim
+  subject left alone, a venue question, own or stranger?), so the orchestrator can show it on a card.
+  In testing, note cards had no before because only review-list befores were kept.
 - **Never upscale a 1000 px render** as a before: the user reviews at 2000 px and at 100 % on a phone.
   In testing, workers sent 1000 px and upscaled befores.
 - **A photo flagged late** (a clip rule that stopped on a plain photo) with no 2000 px before: export
@@ -195,6 +210,12 @@ than the background (Subject lift).
   other.
 - **When the user asks for more exposure, that overrides the cap.** Step `exposure.on_request_step`
   at a time and report the blown %.
+- **"Lift the highlights" (or "brighter") on a dark light-show subject** means brighter lights, not
+  the Highlights slider: on a mid-dark float (subject mean about 15) `light.highlights` barely moves
+  it (14.7 -> 15.8). Raise `light.whites` (+40) and then exposure (+0.5) and check blown on the
+  subject. In testing this gave +56 % with blown 0, and the user approved it. The user's request
+  overrides "never raise exposure on a light show". A worker that finds a float this dark (subject
+  mean under about 20) leaves it and lists it under "Needs the user".
 - Run `M clip` right after adding it, and remove it if blown rose by more than 0.5 points.
   - **Night scenes with lit signs or lamps** (`exposure.night_signs_ignore_blown`): measure blown with `-Region` boxes that leave out the
     signs and lamps. Blown inside signs doesn't count. Keep the boost even when the whole-frame blown
@@ -459,7 +480,8 @@ ISO `denoise.iso_candidate` (default 3200) or above makes a photo a **candidate*
      the decision (denoise at the amount, or skip) for every frame at that ISO in that venue, so one
      parade isn't half denoised. In testing, one chunk skipped black-sky parade frames and the next
      denoised them all. Write the decision into the report, so the next chunk of the venue follows it.
-3. **Turn it on** with `denoise.toggle id=ID enabled=true` (it starts at 50 %). Set the amount with
+3. **Turn it on** with `denoise.toggle id=ID enabled=true` (it starts at 50 %, and it queues the
+   render itself, so a `denoise.queue` right after returns `added: 0`; that's fine). Set the amount with
    `set_develop {id, settings: {enhance: {denoise: N}}}`.
    - **Avoid double noise reduction:** while AI Denoise is on, set the look's `detail.nrLuminance` to
      10 and `detail.nrColor` to 15. Stacking it with the night look's 35 made the skin waxy and the
@@ -491,6 +513,11 @@ ISO `denoise.iso_candidate` (default 3200) or above makes a photo a **candidate*
    - On a night portrait at ISO 6400, 50 % left grain in the sky, 65 % was clean, and 75 % made the skin waxy.
 5. **Render it:** run `denoise.queue 'ids=[…]'` after every amount change. The cached picture is
    for the old amount. Then poll `denoise.status` until `queued` is 0 and `running` is null.
+   - **Wait in one background loop, not in repeated foreground calls (tokens):** run a Bash loop in
+     the background that polls `denoise.status` every 20 s and exits when `queued` is 0 and
+     `running` is null, and do other work (numbers, review lines) meanwhile. In testing, workers
+     spent many turns on 180 s foreground polls. The loop must end before the report (see "finish
+     with nothing running").
    - The built-in denoiser on the GPU takes about 1 minute per photo, and it needs no download.
    - **On the CPU it is much slower.** LightCraft can stop answering ("drew no frame") for 5–6
      minutes while it runs. Wait and keep polling `denoise.status`. Don't start another export, mask
@@ -532,6 +559,10 @@ Follow `straighten` in the preferences:
    - Fit 2 long true verticals (poles, building edges, door frames) with `lfit.ps1`, using
      coordinates from `M grid`. Fit the horizon with `lfit.ps1` on that line.
    - `M tilt` (n ≥ 2000) is a cross-check only.
+   - **Busy night scenes** (lit buildings, few clean edges): `lfit.ps1` can disagree with itself
+     (0.33 / -1.09 / 4.04° on one night facade, with few inliers). There, try
+     `library.select 'ids=[ID]' crop.autoStraighten` first, re-export, and check it with `lfit.ps1`.
+     In testing it gave -2.44° and the lines then measured level; the user approved it.
    - Under 0.3° on both verticals, or on the horizon: already straight, stop.
 3. **Which case:**
    - **Plain roll** (verticals on both sides lean the same way): **rotate** with
@@ -604,8 +635,11 @@ classify every photo:
   - review-list photos;
   - any photo whose numbers look odd: blown or crushed rising past the clip rules, or a mean far from
     the rest of its venue.
-- **Each Read is one small file:** a grid or crop PNG, or a 1000 px render. Never a 2000 or 6000 px
-  file.
+- **Each Read is one small file:** a grid or crop PNG, an `M sheet` contact sheet, or a 1000 px
+  render. Never a 2000 or 6000 px file.
+- **Classify from contact sheets:** `M sheet` of 9 before1k renders per Read, not one Read per photo.
+- **Numbers in one call:** write every before/after box of the chunk into one list and run `M batch`
+  once, instead of one `M mean` / `M clip` per box.
 
 Subagents aren't told the skill's base directory, so list in the brief:
 - this skill's base directory as an absolute path (forward slashes), so the worker can `source` the
@@ -618,6 +652,10 @@ Subagents aren't told the skill's base directory, so list in the brief:
 - which looks are approved, and whether this is a trial batch for proposed looks; the venue-table
   lines for its ids and the preset id of each look; the day's people list (always, even when
   recognition is usable) and whether recognition is usable (see lightcraft-cull, "Whose faces count");
+  when it is, the `people-by-photo.json` lines for its ids (`people.py "$RUN" --ids 1165-1197`), so
+  the worker makes no face calls of its own;
+- that the report ends with **"Improvements"**: at most 6 lines on what would make the skill faster,
+  use fewer tokens, or give better results. The orchestrator collects them for the next skill update;
 - the review material and `review.jsonl` (see Showing results);
 - the report: at most 15–25 lines, with no images;
 - **finish with nothing running:** no background shell job of its own, no export, `denoise.status`
@@ -627,6 +665,16 @@ Subagents aren't told the skill's base directory, so list in the brief:
 **Time:** a chunk of 20 took 30–55 minutes on an entry-level laptop GPU. A plain photo takes about
 1 minute; a masked one 2–10 minutes (each SAM 3 segmentation or added point takes about 60 s); about
 1 more minute per denoised photo. Tell the user the estimate up front.
+
+**Stopping a chunk, or pausing for the user.** When the user wants LightCraft back mid-chunk, or a
+chunk must stop:
+- Stop the worker and every background command of yours (exports, polls, mask jobs). Wait until
+  `denoise.status` shows `queued` 0 and `running` null and `segment.model.status` shows `busy: false`.
+- A worker applies the look to the whole chunk first, so a stopped chunk has touched every id. Revert
+  the whole chunk from `edits.jsonl` (see Revert), not only the photos it finished, then run the
+  cull-marks check below. Restart the chunk later from a fresh folder.
+- List for the user anything left half done that isn't reverted (for example a photo you were testing
+  at a different value), and tell them when LightCraft is free.
 
 **The orchestrator, when the worker reports:**
 - Stop the worker if it says background work is still running (one worker kept running after its
@@ -714,6 +762,9 @@ Never claim a photo is brighter, cleaner or straight without a measurement.
 
 - `geometry.upright` is a command. Setting `{geometry: {upright: …}}` through `set_develop` only
   stores the mode.
+- `set_develop` takes `values` (slider ids) and `settings` (nested, e.g. `{enhance: {denoise: 50}}`)
+  in one call. The `settings` part is applied without any acknowledgement in the result, so check it
+  with `develop.get` once per chunk.
 - **Apply develop values with the MCP `set_develop` tool.** The CLI `develop.set id=ID …` returns
   `ok` but doesn't apply the values. Check with `develop.get` if in doubt.
 - Exports reflect the current develop state, including a +3 coverage check left in place.

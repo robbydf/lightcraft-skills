@@ -6,6 +6,11 @@
 #   mean  : mean luma 0..255 of the region (subject vs background brightness).
 #   clip  : % of pixels in the region with any RGB channel at 255 (blown) and with all channels at 0 (crushed).
 #   crops : stacks the same region of several files into one PNG (-Out) for side-by-side viewing.
+#   sheet : contact sheet: several whole frames tiled -Cols across (default 3), each -Tile px wide
+#           (default 600) and labelled with its file name, into one PNG (-Out). Up to 9 per sheet
+#           reads well: 25 frames in 3 Reads.
+#   batch : one file listing measurements, one per line: <image>|x0,x1,y0,y1[|label]. Prints mean,
+#           blown and crushed for every line in one PowerShell start (before/after on many photos).
 #   grid  : one file; draws labelled coordinate lines over the region (every 0.01, labels every 0.05)
 #           and writes a PNG (-Out), for reading guide / brush coordinates.
 # Usage (PowerShell):  & measure.ps1 sharp a.jpg b.jpg -Region 0.15,0.85,0.15,0.70
@@ -13,10 +18,12 @@
 # Usage (Bash/-File):  powershell -NoProfile -ExecutionPolicy Bypass -File measure.ps1 tilt dir/*.jpg -Region 0.1,0.9,0.05,0.72
 # Region = x0,x1,y0,y1 as fractions of the frame (0 <= x0 < x1 <= 1, 0 <= y0 < y1 <= 1).
 param(
-    [Parameter(Mandatory = $true, Position = 0)][ValidateSet("sharp", "tilt", "mean", "clip", "crops", "grid")][string]$Mode,
+    [Parameter(Mandatory = $true, Position = 0)][ValidateSet("sharp", "tilt", "mean", "clip", "crops", "sheet", "batch", "grid")][string]$Mode,
     [Parameter(Mandatory = $true, Position = 1, ValueFromRemainingArguments = $true)][object[]]$Files,
     $Region = $null,   # a string "a,b,c,d" (powershell -File) or an array (& measure.ps1)
-    [string]$Out = ""
+    [string]$Out = "",
+    [int]$Cols = 3,
+    [int]$Tile = 600
 )
 $ErrorActionPreference = "Stop"
 
@@ -105,6 +112,32 @@ switch ($Mode) {
             $g.DrawImage($src, (New-Object System.Drawing.Rectangle 0, ($i * $ch), $cw, $ch), $rect, [System.Drawing.GraphicsUnit]::Pixel)
             $g.DrawString((Split-Path $f -Leaf), $font, [System.Drawing.Brushes]::Yellow, 5, ($i * $ch + 5)); $src.Dispose(); $i++ }
         $outBmp.Save($Out, [System.Drawing.Imaging.ImageFormat]::Png); $g.Dispose(); $font.Dispose(); $outBmp.Dispose(); "saved $Out" }
+    "sheet" {
+        Need-Out; if ($Files.Count -gt 12) { throw "sheet takes at most 12 files (got $($Files.Count)); 9 per sheet reads best" }
+        $n = $Files.Count; $c = [math]::Min($Cols, $n); $r = [math]::Ceiling($n / $c)
+        $th = [int]($Tile * 2 / 3)   # 3:2 cells; portrait frames are fitted inside (narrower), not stretched
+        $outBmp = New-Object System.Drawing.Bitmap ($c * $Tile), ($r * $th); $g = [System.Drawing.Graphics]::FromImage($outBmp)
+        $g.Clear([System.Drawing.Color]::Black); $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+        $font = New-Object System.Drawing.Font "Arial", 14, ([System.Drawing.FontStyle]::Bold); $i = 0
+        foreach ($f in $Files) { $src = [System.Drawing.Image]::FromFile($f)
+            $tw = $Tile; $tht = [int]($Tile * $src.Height / $src.Width); if ($tht -gt $th) { $tht = $th; $tw = [int]($th * $src.Width / $src.Height) }
+            $x = ($i % $c) * $Tile + [int](($Tile - $tw) / 2); $y = [math]::Floor($i / $c) * $th + [int](($th - $tht) / 2)
+            $g.DrawImage($src, (New-Object System.Drawing.Rectangle $x, $y, $tw, $tht)); $src.Dispose()
+            $lab = [IO.Path]::GetFileNameWithoutExtension($f); $sz = $g.MeasureString($lab, $font)
+            $g.FillRectangle([System.Drawing.Brushes]::Black, [float]($x + 3), [float]($y + 3), $sz.Width, $sz.Height)
+            $g.DrawString($lab, $font, [System.Drawing.Brushes]::Yellow, [float]($x + 3), [float]($y + 3)); $i++ }
+        $outBmp.Save($Out, [System.Drawing.Imaging.ImageFormat]::Png); $g.Dispose(); $font.Dispose(); $outBmp.Dispose(); "saved $Out ($n frames, $c x $r)" }
+    "batch" {
+        if ($Files.Count -ne 1) { throw "batch takes one list file: <image>|x0,x1,y0,y1[|label] per line" }
+        $base = Split-Path $Files[0] -Parent; $ln = 0
+        foreach ($line in Get-Content -LiteralPath $Files[0]) { $ln++; $line = $line.Trim(); if (-not $line -or $line.StartsWith("#")) { continue }
+            $p = $line -split '\|'; if ($p.Count -lt 2) { "line ${ln}: need <image>|x0,x1,y0,y1[|label]"; continue }
+            $img = $p[0].Trim(); if (-not [IO.Path]::IsPathRooted($img)) { $img = Join-Path $base $img }
+            if (-not (Test-Path -LiteralPath $img)) { "line ${ln}: missing file $img"; continue }
+            $b = @($p[1] -split '[,\s]+' | Where-Object { $_ } | ForEach-Object { [double]::Parse($_, [Globalization.CultureInfo]::InvariantCulture) })
+            if ($b.Count -ne 4 -or $b[0] -ge $b[1] -or $b[2] -ge $b[3]) { "line ${ln}: bad region $($p[1])"; continue }
+            $lab = if ($p.Count -gt 2) { $p[2].Trim() } else { Split-Path $img -Leaf }
+            "{0}  {1} {2}  [{3}]" -f $lab, [LcMeasure]::Mean($img, $b[0], $b[1], $b[2], $b[3]), [LcMeasure]::Clip($img, $b[0], $b[1], $b[2], $b[3]), ($b -join ',') } }
     "grid" {
         if ($Files.Count -ne 1) { throw "grid takes exactly one file" }; Need-Out
         if (-not $Rg.Count) { $Rg = 0, 1, 0, 1 }

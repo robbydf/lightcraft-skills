@@ -72,8 +72,19 @@ not our faces, this is just a scene". Decide who is whose, in this order:
    the library). Recognition is off by default in LightCraft, and nobody may have named faces yet: if
    either check fails, skip this step for the whole run and use the people list (step 2). Never turn
    recognition on, download a model, run `faces.detect` or name faces yourself: those are the user's.
-   - When usable: `faces.suggest 'ids=[…]'` per photo. A face whose `suggestion.name` is one of the
-     user's people (`people.own` in the preferences, or names the user gave) is the user's own.
+   - When usable, **build the photo -> name map once** and give each worker its lines (no face calls
+     per photo):
+     ```bash
+     for n in Ana Ben; do "$CLI" run --connect faces.person name="$n" more=0 > "$RUN/faces-$n.json"; done   # names from people.own
+     "$CLI" run --connect faces.unnamed limit=5000 > "$RUN/faces-unnamed.json"
+     python -I "$LC_SCRIPTS/people.py" "$RUN" "$RUN"/faces-*.json      # writes $RUN/people-by-photo.json
+     python -I "$LC_SCRIPTS/people.py" "$RUN" --ids 120-160            # one chunk's lines
+     ```
+     A face mapped to one of the user's people (`people.own` in the preferences, or names the user
+     gave) is the user's own; `suggested:<name>` counts too.
+   - **Don't use `faces.suggest` to find named people:** it lists only unnamed faces, so a photo
+     whose faces are all named returns `faces: []`. `faces.unnamed` defaults to 600 faces, so always
+     pass a higher `limit`.
    - **A face with no suggestion is not a stranger by that alone.** Recognition isn't reliable yet,
      so judge it by the people list and step 3, as if recognition were off.
    - A suggestion that contradicts the clothing (a named face on a passer-by in the background):
@@ -91,9 +102,13 @@ not our faces, this is just a scene". Decide who is whose, in this order:
 5. **Doubt:** treat the face as the user's own (the stricter reading), and add "own or stranger?" to
    the reason, so it reaches the review list.
 
-If the user wants this more reliable, offer once to turn on face recognition (Settings ▸ Faces) and
-name their people in LightCraft's People view: a few faces per person is enough for `faces.suggest`.
-Then add the names to `people.own` in the preferences.
+**Name your people first (offer before the first cull of a library).** Offer once to turn on face
+recognition (Settings ▸ Faces) and name the user's own people in LightCraft's People view, then add
+the names to `people.own` in the preferences. It replaces most clothing guesswork and "own or
+stranger?" cards. In testing, the user named about 800 faces of 3 people in one sitting.
+- Tell them **strangers never need naming**: unnamed faces fall back to the people list.
+- LightCraft's People view shows only 600 unnamed faces and can't dismiss them (the view's own
+  limit). That doesn't matter: name the user's people from the faces shown, and leave the rest.
 
 **Never:**
 - Delete anything, or use the `pick` flag.

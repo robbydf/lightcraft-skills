@@ -73,10 +73,11 @@ scripts/
   lc-env.sh             sourced by every Bash call: sets CLI, LC_SCRIPTS, RUNS, PREFS, M, PSX
   find-lightcraft.ps1   install folder detection
   lightcraft-mcp.ps1    start / stop
-  measure.ps1           sharp, tilt, mean, clip, crops, grid
+  measure.ps1           sharp, tilt, mean, clip, crops, sheet (contact sheet), batch (many boxes), grid
   lfit.ps1 rgb.ps1 sbs.ps1   line fit, region colour, phone before|after images
   bursts.py runstate.py review.py   burst grouping, durable run state, review page
   editlog.py                        valid edits.jsonl lines (start, done, check --fix)
+  people.py                         photo -> named people map from LightCraft face naming
 preferences.example.md
 ```
 
