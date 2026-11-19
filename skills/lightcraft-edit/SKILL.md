@@ -60,9 +60,14 @@ Edit only the photos the user names, or a scene type they approved for a batch. 
 1. Record its history: `"$CLI" run --connect history.list id=ID` gives `cursor`, which is `null` if it
    was never edited.
 2. Note its masks: `get_develop {id}` → `masks`.
-3. Append `{"id":ID,"cursor":<cursor>,"masksBefore":<count>}` to `$RUN/edits.jsonl`.
+3. Append `{"id":ID,"cursor":<cursor>,"masksBefore":<count>}` to `$RUN/edits.jsonl` with the helper,
+   which always writes valid JSON:
+   `python -I "$LC_SCRIPTS/editlog.py" "$RUN" start ID <cursor|null> <count> <round>`.
+   - Never write the line by hand from Python (`None` and `True` are not JSON). In testing, 19 lines
+     written that way broke strict readers. `editlog.py "$RUN" check` lists invalid lines, and
+     `check --fix` repairs them (with a backup).
    - Use the durable run folder, not the scratchpad, which a reboot clears.
-   - After the photo is finished, add `{"id":ID,"done":true,…}`.
+   - After the photo is finished: `editlog.py "$RUN" done ID <round> [key=value …]`.
    - A rerun skips ids already marked done in the current round.
 4. Start **every** CLI call with `library.select 'ids=[ID]'`. Mask, geometry and history commands act
    on the active photo, and the user may click another photo in the GUI.
@@ -83,7 +88,17 @@ photo of a chunk, export every unedited photo in calls of 5–6 ids (more passes
 "$CLI" run --connect app.export 'ids=[501,502,503,504,505]' dir="$SP/before1k" longEdge=1000 format=jpeg naming='{name}' conflict=overwrite
 ```
 Then rename `before2k/<file>.jpg` to `ID-before.jpg`. The 1000 px files are the classification and
-clipping-check renders. Never reset an edited photo just to get a "before". Likewise, apply the look to
+clipping-check renders. Never reset an edited photo just to get a "before".
+- **2000 px befores are required** for every review-list id and every photo that isn't plain (own
+  people, a denoise candidate, a tilt). Plain photos may skip the 2000 px before to save time.
+- **Never upscale a 1000 px render** as a before: the user reviews at 2000 px and at 100 % on a phone.
+  In testing, workers sent 1000 px and upscaled befores.
+- **A photo flagged late** (a clip rule that stopped on a plain photo) with no 2000 px before: export
+  it from history. `library.select 'ids=[ID]' history.list` gives the current cursor C. If the
+  recorded cursor is a number R, run `history.restore index=R`, export the 2000 px before, then
+  `history.restore index=C`, and confirm with `develop.get` that the edit is back. With a `null`
+  cursor there is no unedited step to restore: write "before is 1000 px" on the card instead of
+  upscaling. (Not yet tested in a run: compare `develop.get` before and after.) Likewise, apply the look to
 every photo that needs nothing else (no mask, no denoise, no straightening), then export their after
 renders together the same way. Use a new file name for each working render: a re-export under the
 same name can be read back stale.
@@ -242,7 +257,8 @@ than the background (Subject lift).
     ordinary surfaces closest to the range and say so.
   - Compare the face with the mean of the 2 boxes.
 - **Strangers get no mask (speed and intent).** Only the user's own people are subjects (see
-  lightcraft-cull, "Whose faces count": named faces, else the day's people list by clothing). Don't
+  lightcraft-cull, "Whose faces count": recognised names when face recognition is on and faces are
+  named, else the day's people list by clothing). Don't
   measure or mask strangers, crowds, staff or performers. Report "no own people in frame: scene" and
   move on.
 - **Several people:** decide on the **darkest main-subject face**, and one mask covers all of them.
@@ -439,6 +455,10 @@ ISO `denoise.iso_candidate` (default 3200) or above makes a photo a **candidate*
    area: sky, a wall, or skin. Name the crop region in the report.
 2. **Skip** if that mid-tone area shows no visible grain. For example, a black sky plus a lit, clean
    subject (a floodlit castle at ISO 4000): denoising would only soften the stonework.
+   - **Decide once per venue and ISO, not per frame.** The first candidate at an ISO in a venue sets
+     the decision (denoise at the amount, or skip) for every frame at that ISO in that venue, so one
+     parade isn't half denoised. In testing, one chunk skipped black-sky parade frames and the next
+     denoised them all. Write the decision into the report, so the next chunk of the venue follows it.
 3. **Turn it on** with `denoise.toggle id=ID enabled=true` (it starts at 50 %). Set the amount with
    `set_develop {id, settings: {enhance: {denoise: N}}}`.
    - **Avoid double noise reduction:** while AI Denoise is on, set the look's `detail.nrLuminance` to
@@ -450,10 +470,14 @@ ISO `denoise.iso_candidate` (default 3200) or above makes a photo a **candidate*
      candidate at each ISO level (for example 3200, 4000, 6400) in the whole run, and append
      `{"iso":6400,"amount":65,"id":ID}` to `$RUN/denoise-ladder.jsonl`. Read that file before the
      first denoised photo of a chunk.
-   - **Later candidates at a recorded ISO:**
-     - Set the recorded amount straight away.
-     - Make **one** full-size export at that amount and cut one 100 % crop of a mid-tone area and,
-       if there is a face, the skin.
+   - **Later candidates at a recorded ISO:** one check per ISO **per chunk**, not per photo.
+     - Set the recorded amount straight away on every candidate at that ISO.
+     - Make **one** full-size export at that amount, on the frame of that ISO with the most mid-tone
+       sky or shadow, and cut one 100 % crop of a mid-tone area. Every other frame at that ISO gets
+       the amount with no export of its own. A photo with own people's faces still gets its own
+       skin crop.
+     - In testing, a full-size check on every parade photo took 1.2 minutes per photo; one check
+       per ISO took 0.7–1.0.
      - Make no 0 % render and no second full-size export.
      - Step up one amount only if grain still shows in that crop.
      - Skip-the-grain-check (step 2) also uses this same single export, so the first full-size export
@@ -486,6 +510,12 @@ Run `M clip` on the 1000 px render before any edit and on the after render.
   0 for nothing; the user judged the result fine. If crushed rose by more than 2
   points there, raise `light.blacks` by 8 and check again. Never raise blacks above 0 in a light
   show; at 0, stop and report.
+  - The look starts at blacks −5, so a dim float or building on a black sky often needs blacks 0
+    (one step). Measure only on the lit subject's box; a whole-frame crushed rise on black sky
+    doesn't count. In testing, whole-frame crushed rose 2–6 points on parade frames whose floats
+    rose under 1.
+  - If crushed on the subject still rose more than 2 points at blacks 0, add a "Flagged edits" card
+    with the numbers. Never raise exposure on a light show to fix it.
 - Each fix runs at most 2 times; then stop and report the numbers.
 
 ## Straightening
@@ -547,6 +577,11 @@ active photo).
 classify every photo:
 1. Split the day into venues by capture time (a gap of about 10 minutes or more, or a clear change of
    place on the cull's 640 px sheets or 1000 px exports).
+   - **Look at every 6th–8th photo of a venue**, not only its first: export them at 480 px in calls
+     of about 7 and Read them. A time gap misses a change of place inside a range. In testing, dad
+     and the boy under a dim wooden canopy fell inside "outdoor stage show, daylight", and a dusk ride
+     frame inside a daylight carrousel range, because only the first photo of each range was seen.
+   - Split a range where the light or the place changes, even with no time gap.
 2. Give each venue one look by the rules in Looks, and write `$RUN/venues-<day>.txt` with one line
    per venue: `<first id>-<last id> | <venue> | <look> | <why>`. For example
    `630-650 | Asakusa street, night | look.night | lit signs, no large sky`.
@@ -581,9 +616,13 @@ Subagents aren't told the skill's base directory, so list in the brief:
   whether to revert first, or (as for a user's "Change" note) to add to the current edit, with a
   new round tag;
 - which looks are approved, and whether this is a trial batch for proposed looks; the venue-table
-  lines for its ids and the preset id of each look; the day's people list;
+  lines for its ids and the preset id of each look; the day's people list (always, even when
+  recognition is usable) and whether recognition is usable (see lightcraft-cull, "Whose faces count");
 - the review material and `review.jsonl` (see Showing results);
-- the report: at most 15–25 lines, with no images.
+- the report: at most 15–25 lines, with no images;
+- **finish with nothing running:** no background shell job of its own, no export, `denoise.status`
+  with `queued` 0 and `running` null, and `segment.model.status` with `busy: false`. Say so in the
+  report. In testing, one worker reported while its own background job was still running.
 
 **Time:** a chunk of 20 took 30–55 minutes on an entry-level laptop GPU. A plain photo takes about
 1 minute; a masked one 2–10 minutes (each SAM 3 segmentation or added point takes about 60 s); about

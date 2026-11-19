@@ -24,7 +24,7 @@ for `mask.adjust`.
 - `pick.soft_but_readable`: pick (slightly soft, no visible blur at 100 %)
 - `record_shots`: unmarked (maps, signs, menus, timetables, tickets, phone screens)
 - `record_shots.food`: keep (food, food displays, shop counters and stalls are judged like any photo; menus stay record shots)
-- `people.own`: [] (names of the user's people as named in LightCraft's faces; empty = use the day's people list by clothing)
+- `people.own`: [] (names of the user's people as named in LightCraft's People view; used only when face recognition is on and faces are named. Otherwise, and for any face it doesn't name: the day's people list by clothing)
 - `panel`: trial (`off`, `trial` = show the panel's changes before applying them, or `on`)
 - `panel.trial_days`: 2
 

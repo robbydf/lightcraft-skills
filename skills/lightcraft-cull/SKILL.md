@@ -66,10 +66,19 @@ the panel applies only to **the user's own people**: the family or friends the p
 faces are part of the scene: a crowd street is a scene photo, whatever the faces in it do. In testing,
 the panel voted to drop a crowd street for the faces in it, and the user kept it: "the faces here are
 not our faces, this is just a scene". Decide who is whose, in this order:
-1. **Named faces.** If faces are named in LightCraft (`faces.suggest 'ids=[…]'` returns a
-   `suggestion` with a name for some face, or `people.own` in the preferences lists names), a face
-   suggested as one of those names is the user's own. Unnamed faces with no suggestion are strangers.
-2. **Otherwise, the day's people list.** Before culling a day, look at its posed photos (people
+1. **Recognised faces, only when usable.** Check once per run:
+   `"$CLI" run --connect faces.models.list` must show `enabled: true` and an `embedder`, and
+   `faces.suggest 'ids=[<one photo with people>]'` must show `galleryFaces` above 0 (faces named in
+   the library). Recognition is off by default in LightCraft, and nobody may have named faces yet: if
+   either check fails, skip this step for the whole run and use the people list (step 2). Never turn
+   recognition on, download a model, run `faces.detect` or name faces yourself: those are the user's.
+   - When usable: `faces.suggest 'ids=[…]'` per photo. A face whose `suggestion.name` is one of the
+     user's people (`people.own` in the preferences, or names the user gave) is the user's own.
+   - **A face with no suggestion is not a stranger by that alone.** Recognition isn't reliable yet,
+     so judge it by the people list and step 3, as if recognition were off.
+   - A suggestion that contradicts the clothing (a named face on a passer-by in the background):
+     treat it as own and add "own or stranger?".
+2. **The day's people list (always written: the fallback for every face recognition doesn't name).** Before culling a day, look at its posed photos (people
    stopped and facing the camera): those are the user's people. Write one line per day naming them by
    clothing, such as "woman in white shirt and rust skirt; boy in dark jacket", and give it to every
    worker and panel reviewer for that day. People wear the same clothes all day, so the list holds
@@ -82,8 +91,9 @@ not our faces, this is just a scene". Decide who is whose, in this order:
 5. **Doubt:** treat the face as the user's own (the stricter reading), and add "own or stranger?" to
    the reason, so it reaches the review list.
 
-If the user wants this reliable, offer once to name their people in LightCraft: a few faces per
-person is enough for `faces.suggest`.
+If the user wants this more reliable, offer once to turn on face recognition (Settings ▸ Faces) and
+name their people in LightCraft's People view: a few faces per person is enough for `faces.suggest`.
+Then add the names to `people.own` in the preferences.
 
 **Never:**
 - Delete anything, or use the `pick` flag.

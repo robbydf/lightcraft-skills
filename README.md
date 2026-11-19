@@ -76,6 +76,7 @@ scripts/
   measure.ps1           sharp, tilt, mean, clip, crops, grid
   lfit.ps1 rgb.ps1 sbs.ps1   line fit, region colour, phone before|after images
   bursts.py runstate.py review.py   burst grouping, durable run state, review page
+  editlog.py                        valid edits.jsonl lines (start, done, check --fix)
 preferences.example.md
 ```
 
