@@ -535,6 +535,13 @@ active photo).
   masks or denoise. What fills a worker's context is mostly the images it reads, so keep plain photos
   numeric (see Lean workers below).
 - Give each chunk its own folder.
+- **Tell the user, before the first chunk,** what they may do in LightCraft while workers run (see
+  "Using LightCraft while a run is going" in the plugin README): view only; scroll, zoom and pan the
+  photo on screen; no clicking other photos, no filter, source or album changes, no minimizing, no
+  dialogs, no rating or editing. Suggest looking between chunks or at the review pages instead.
+  If the user says they clicked a photo during a chunk, run `history.list` on that photo and on the
+  worker's active photo at that time after the chunk ends, and undo any step that isn't theirs or the
+  worker's intended one (`history.restore` to the step before it).
 
 **Venue table (orchestrator, before the first chunk).** Classify the venues once, so workers don't
 classify every photo:

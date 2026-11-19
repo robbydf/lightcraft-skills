@@ -16,6 +16,10 @@ with `runstate.py picks`.
 - LightCraft must be running with the bridge (the `lightcraft-mcp` skill, `start`). The window must
   stay **un-minimized** for the whole run: a minimized window stops drawing, and every request then
   fails with "the app drew no frame".
+- **Tell the user before the run** what they may do in LightCraft meanwhile (see "Using LightCraft
+  while a run is going" in the plugin README): view only, no clicking other photos, no filter, source
+  or album changes, no minimizing, no dialogs, no rating. The pre-flight `library.state` check fails on
+  any filter change, and `runstate.py check` reports any rating the user changes as a mismatch.
 - Run CLI commands **from Bash**. Windows PowerShell 5.1 strips the `"` inside JSON arguments.
   Shell variables don't persist between tool calls, so start every Bash call with:
   ```bash

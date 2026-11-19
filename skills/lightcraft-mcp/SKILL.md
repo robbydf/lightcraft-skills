@@ -86,3 +86,6 @@ is needed.
   - The script restores the window first.
   - If you call `lightcraft-cli` or `mcp__lightcraft__*` tools directly and see that error, restore
     the window, or re-run `start`.
+- While a cull or edit run is going, the user should only view: clicking another photo can move a
+  worker's mask or crop step onto it, and a filter change or a modal dialog can block requests. See
+  "Using LightCraft while a run is going" in the plugin README.

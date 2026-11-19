@@ -86,6 +86,28 @@ preferences.example.md
 - The edit skill records each photo's history cursor before changing it, so it can restore it.
 - Neither skill rates, flags or edits outside the photos it was given.
 
+## Using LightCraft while a run is going
+
+A cull or edit run drives the same LightCraft window you see. You can look at photos, but don't edit
+or export, and keep to these rules so nothing lands on the wrong photo:
+
+- **Safe:** scrolling the grid, looking at and zooming or panning the photo already on screen,
+  resizing the window or moving it to another monitor.
+- **Avoid while a worker is running:**
+  - **Clicking or arrowing to other photos.** Mask, crop, geometry and history commands act on the
+    active photo. The worker re-selects its photo before each command, but a click between that select
+    and the command can put the step on the photo you clicked.
+  - **Changing the source, filters or album.** Workers select photos by id; a filter that hides the
+    photo can make the select fail. The cull also checks that the library view is unfiltered.
+  - **Minimizing the window.** It stops drawing and every request fails ("the app drew no frame").
+  - **Opening dialogs** (Settings, Export, Preferences). A modal dialog can block requests the same way.
+  - **Rating, flagging or editing anything.** The check after each chunk compares the whole library with
+    the run log, and any change shows as a mismatch.
+- **Better:** look between chunks (ask Claude for a gap), or look at the review pages and exported
+  renders, which don't touch LightCraft.
+- If you clicked something by accident, tell Claude the time and the photo. It checks that photo's
+  history after the chunk and undoes any step that landed on it.
+
 ## Known behaviour, LightCraft 0.21.1
 
 - A **minimized** window stops drawing, and every request then fails with "the app drew no frame".
