@@ -107,8 +107,8 @@ Edit only the photos the user names, or a scene type they approved for a batch. 
   python -I "$LC_SCRIPTS/editlog.py" "$RUN" done-ids <round> --ids 501,502           # done: … / todo: …
   ```
 - **Id lists** (`--ids` of `runstate.py`, `denoise-wait.sh`, `editlog.py done-ids`): `501,502,503`,
-  `501 502 503` and (runstate) ranges `501-505` all work. Before 0.1.13, `runstate.py marks --ids 501
-  502` silently checked only 501.
+  `501 502 503` and ranges `501-505` all work; a bad id or a reversed range stops with a message.
+  Before 0.1.13, `runstate.py marks --ids 501 502` silently checked only 501.
 - MCP tools may be deferred. Load them in one ToolSearch call:
   `select:mcp__lightcraft__render_preview,mcp__lightcraft__set_develop,mcp__lightcraft__get_develop,mcp__lightcraft__export`.
 

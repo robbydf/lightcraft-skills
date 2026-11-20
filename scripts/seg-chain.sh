@@ -20,13 +20,16 @@ while [ $# -gt 0 ]; do
 done
 DONE="$SP/seg-$ID.done"; rm -f "$DONE"
 fail() { echo "FAILED $*" > "$DONE"; echo "FAILED $*" >&2; exit "${RC:-1}"; }
+trap 'fail "stopped by a signal"' INT TERM
+case "$ID" in ''|*[!0-9]*) fail "id must be a number, got '$ID'" ;; esac
 [ ${#PROMPTS[@]} -gt 0 ] || fail "no prompt given"
 HERE="$(dirname "${BASH_SOURCE[0]}")"
 source "$HERE/lc-env.sh" >/dev/null 2>&1
 [ -n "${CLI:-}" ] || fail "LightCraft CLI not found"
 PY="${LC_PY:-python}"
-seg() { "$CLI" run --connect develop.get id="$ID" 2>/dev/null | "$PY" -I "$HERE/lcjson.py" seg "$NAME"; }
-read -r mid _ _ <<< "$(seg)"
+seg() { "$CLI" run --connect develop.get id="$ID" 2>/dev/null | "$PY" -I "$HERE/lcjson.py" seg "$NAME" 2>&1; }
+s=$(seg) || fail "develop.get: $s"
+read -r mid _ _ <<< "$s"
 [ "$mid" = "none" ] || fail "photo $ID already has a mask called $NAME (id $mid): delete it or use another name"
 w=$(bash "$HERE/seg-wait.sh" "$ID") || fail "seg-wait: $w"
 start=$(date +%s)
@@ -37,11 +40,15 @@ for k in "${!PROMPTS[@]}"; do
   else
     out=$("$CLI" run --connect library.select "ids=[$ID]" mask.addComponent "id=$mid" op=add kind=prompt "text=$p" 2>&1)
   fi
-  case "$out" in *'"ok":false'*) fail "prompt '$p': $(printf '%s' "$out" | grep -o '"error":"[^"]*"' | head -1)" ;; esac
+  rc=$?
+  if [ $rc -ne 0 ] || printf '%s' "$out" | grep -Eq '"ok"[[:space:]]*:[[:space:]]*false'; then
+    fail "prompt '$p' (CLI exit $rc): $(printf '%s' "$out" | grep -Eo '"error"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1)"
+  fi
   t0=$(date +%s)
   while :; do
-    read -r mid parts ready <<< "$(seg)"
-    [ "$mid" != "none" ] && [ "${ready:-0}" -ge $((k + 1)) ] && break
+    # a failed poll (app busy) is retried; keep the last good mask id
+    if s=$(seg); then read -r m parts ready <<< "$s"; [ "$m" != "none" ] && mid="$m"; else ready=0; fi
+    [ "$m" != "none" ] && [ "${ready:-0}" -ge $((k + 1)) ] && break
     [ $(( $(date +%s) - t0 )) -ge "$MAX" ] && RC=2 fail "prompt '$p' (part $((k + 1))) has no seg data after ${MAX}s: SAM probably found nothing for it (mask ${mid}, parts ${parts:-0}, ready ${ready:-0})"
     sleep 6
   done

@@ -108,6 +108,10 @@ class RunState(unittest.TestCase):
         code, out = run("runstate.py", "marks", self.p0, now, "--ids", "1,x")
         self.assertNotEqual(code, 0)
         self.assertNotIn("Traceback", out)
+        # a reversed range must not turn into an empty filter (which would check every photo)
+        code, out = run("runstate.py", "marks", self.p0, now, "--ids", "3-1")
+        self.assertNotEqual(code, 0)
+        self.assertIn("bad range", out)
 
     def test_bad_input_no_traceback(self):
         for args in (("log", self.run), ("log", self.run, '{"group":1,"ids":[],"picks":[],"rejects":[]}')):
@@ -174,6 +178,41 @@ class EditLogDoneIds(unittest.TestCase):
         self.assertEqual(code, 0, out)
         self.assertIn("done: 1", out)
         self.assertIn("todo: 2,3", out)
+        code, out = run("editlog.py", run_dir, "done-ids", "r1", "--ids", "1-4")
+        self.assertIn("todo: 2,3,4", out)
+        for bad in ("x", "4-2"):
+            code, out = run("editlog.py", run_dir, "done-ids", "r1", "--ids", bad)
+            self.assertNotEqual(code, 0)
+            self.assertNotIn("Traceback", out)
+            self.assertNotIn("done:", out)
+        code, out = run("editlog.py", os.path.join(tempfile.mkdtemp(), "none"), "done-ids", "r1")
+        self.assertNotEqual(code, 0)
+        self.assertIn("not a run folder", out)
+
+
+def git_bash():
+    """A POSIX bash, never Windows' WSL launcher (System32\bash.exe), or None."""
+    import shutil
+    for b in (os.path.join(os.environ.get("ProgramFiles", r"C:\Program Files"), "Git", "bin", "bash.exe"), shutil.which("bash")):
+        if b and os.path.exists(b) and "system32" not in b.lower():
+            return b
+    return None
+
+
+@unittest.skipUnless(git_bash(), "no bash")
+class DenoiseWaitIds(unittest.TestCase):
+    def ids(self, *args):
+        sp = tempfile.mkdtemp()
+        subprocess.run([git_bash(), os.path.join(SCRIPTS, "denoise-wait.sh"), sp, *args],
+                       env=dict(os.environ, DENOISE_WAIT_PARSE_ONLY="1"), capture_output=True, timeout=60)
+        with open(os.path.join(sp, "denoise.done"), encoding="utf-8") as f:
+            return f.read().strip()
+
+    def test_lists_and_ranges(self):
+        self.assertEqual(self.ids("--ids", "1", "2,3", "--max", "5"), "ids=1,2,3")
+        self.assertEqual(self.ids("--ids", "501-503", "9"), "ids=501,502,503,9")
+        for bad in ("x", "5-1", "1-2-3", "-4", "*", "12345678901"):
+            self.assertIn("denoise-wait: --ids", self.ids("--ids", bad), bad)
 
 
 class LcJson(unittest.TestCase):
@@ -205,6 +244,22 @@ class LcJson(unittest.TestCase):
         self.assertEqual(self.pipe("masks", dev), (0, "1"))
         self.assertEqual(self.pipe("seg", dev, "Subject"), (0, "3 2 1"))
         self.assertEqual(self.pipe("seg", dev, "Other"), (0, "none 0 0"))
+
+    def test_utf8_last_line_and_null_rect(self):
+        # UTF-8 from the CLI must not be read as the ANSI code page (python -I ignores PYTHONUTF8)
+        r = {"masks": [{"id": 4, "name": "光 Subject é", "components": [{"shape": {"seg": "x"}}]}],
+             "crop": {"geometry": {"angle": 0, "rect": {"x0": None, "x1": None, "y0": 0.1, "y1": 0.9}}}}
+        dev = json.dumps({"command": "develop.get", "ok": True, "result": r}, ensure_ascii=False).encode("utf-8")
+        p = subprocess.run([sys.executable, "-I", os.path.join(SCRIPTS, "lcjson.py"), "masks"],
+                           input=dev, capture_output=True)
+        self.assertEqual((p.returncode, p.stdout.strip()), (0, b"1"), p.stderr)
+        code, out = self.pipe("crop", json.dumps({"command": "develop.get", "ok": True, "result": r}))
+        self.assertEqual(code, 0, out)
+        self.assertIn("crop_per_edge=10.0%", out)
+        # an earlier failed line for the same command doesn't hide a later good one
+        bad = json.dumps({"command": "history.list", "ok": False, "error": "busy"})
+        good = json.dumps({"command": "history.list", "ok": True, "result": {"cursor": 2}})
+        self.assertEqual(self.pipe("cursor", bad + "\n" + good), (0, "2"))
 
 
 class FindLightCraft(unittest.TestCase):

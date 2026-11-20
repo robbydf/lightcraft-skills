@@ -305,9 +305,12 @@ def ids_arg(rest):
     for t in toks:
         a, dash, b = t.partition("-")
         try:
-            out |= set(range(int(a), int(b) + 1)) if dash else {int(t)}
+            lo, hi = (int(a), int(b)) if dash else (int(t), int(t))
         except ValueError:
             sys.exit(f"--ids: not an id or range: {t!r}")
+        if lo < 0 or hi < lo or hi - lo >= 100000:
+            sys.exit(f"--ids: bad range {t!r} (write the lower id first)")
+        out |= set(range(lo, hi + 1))
     return out
 
 

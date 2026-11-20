@@ -12,7 +12,7 @@ The CLI prints a blank line or several JSON lines (one per command, e.g. after l
 reads the last line whose "command" matches, so `library.select 'ids=[ID]' history.list` works too.
 `crop` prints e.g. `angle=-3.75 crop_per_edge=4.5% area_kept=82.0% constrain_crop=true upright=off`:
 crop_per_edge is the largest of the four edges' cut, in % of the frame. Exit 1 with a message if the
-command failed or the output has no such result.
+command failed or the output has no such result (the last matching line counts).
 """
 import json
 import sys
@@ -31,22 +31,24 @@ def result(text, command):
             o = json.loads(line)
         except ValueError:
             continue
-        if o.get("command") != command:
-            continue
-        if not o.get("ok", True):
-            sys.exit(f"lcjson: {command} failed: {o.get('error')}")
-        found = o.get("result") or {}
+        if o.get("command") == command:
+            found = o  # the last matching line wins
     if found is None:
         sys.exit(f"lcjson: no {command} result in the input")
-    return found
+    if not found.get("ok", True):
+        sys.exit(f"lcjson: {command} failed: {found.get('error')}")
+    return found.get("result") or {}
 
 
 def crop_line(r):
     c = r.get("crop") or {}
     g = c.get("geometry") or {}
-    rect = g.get("rect") or {"x0": 0, "x1": 1, "y0": 0, "y1": 1}
-    cuts = [rect["x0"], 1 - rect["x1"], rect["y0"], 1 - rect["y1"]]
-    area = (rect["x1"] - rect["x0"]) * (rect["y1"] - rect["y0"])
+    rect = g.get("rect") or {}
+    x0, y0 = rect.get("x0") or 0, rect.get("y0") or 0
+    x1 = 1 if rect.get("x1") is None else rect["x1"]
+    y1 = 1 if rect.get("y1") is None else rect["y1"]
+    cuts = [x0, 1 - x1, y0, 1 - y1]
+    area = (x1 - x0) * (y1 - y0)
     geo = r.get("geometry") or {}
     return (f"angle={g.get('angle', 0)} crop_per_edge={max(cuts) * 100:.1f}% area_kept={area * 100:.1f}% "
             f"constrain_crop={str(bool(geo.get('constrain_crop'))).lower()} upright={geo.get('upright', 'off')}")
@@ -56,7 +58,8 @@ def main(argv):
     if not argv or argv[0] not in WANT or len(argv) != (2 if argv[0] == "seg" else 1):
         sys.exit(__doc__)
     what = argv[0]
-    r = result(sys.stdin.read(), WANT[what])
+    # The CLI writes UTF-8; under python -I a Windows pipe would otherwise be read as the ANSI code page.
+    r = result(sys.stdin.buffer.read().decode("utf-8-sig", "replace"), WANT[what])
     if what == "cursor":
         print("null" if r.get("cursor") is None else r["cursor"])
     elif what == "crop":

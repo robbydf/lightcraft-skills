@@ -6,7 +6,7 @@ Usage:
   python -I editlog.py RUN start ID CURSOR MASKS ROUND   # CURSOR: a number or null
   python -I editlog.py RUN done ID ROUND [key=value ...]  # extra fields, e.g. look=night denoise=50
   python -I editlog.py RUN check [--fix]                  # list invalid lines; --fix repairs None/True/False
-  python -I editlog.py RUN done-ids ROUND [--ids 1,2,3]   # ids with a done line in ROUND (comma list);
+  python -I editlog.py RUN done-ids ROUND [--ids 1,2,3 | 1 2 3 | 1-5]   # ids with a done line in ROUND (comma list);
                                                           # with --ids, also "todo:" the listed ids not done
 
 Always valid JSON (null, true, false), one object per line, appended. `check --fix` keeps a backup
@@ -74,17 +74,29 @@ def check(run, fix):
 
 
 def done_ids(run, rnd, rest):
+    want = None
+    if "--ids" in rest:  # check the ids first, so a bad list prints only the error
+        want = []
+        for t in (t for a in rest[rest.index("--ids") + 1:] for t in a.replace(",", " ").split()):
+            a, dash, b = t.partition("-")
+            if not (a.isdigit() and (not dash or b.isdigit())) or (dash and not 0 <= int(b) - int(a) < 100000):
+                sys.exit(f"editlog: --ids: not an id or range: {t!r}")
+            want += range(int(a), int(b) + 1) if dash else [int(t)]
+        if not want:
+            sys.exit("editlog: --ids needs a list of ids")
     done = set()
-    for line in open(os.path.join(run, "edits.jsonl"), encoding="utf-8"):
-        try:
-            o = json.loads(line)
-        except ValueError:
-            continue  # `check` reports these
-        if isinstance(o, dict) and o.get("done") and str(o.get("round")) == rnd and "id" in o:
-            done.add(int(o["id"]))
+    path = os.path.join(run, "edits.jsonl")
+    if os.path.exists(path):
+        with open(path, encoding="utf-8") as f:
+            for line in f:
+                try:
+                    o = json.loads(line)
+                    if isinstance(o, dict) and o.get("done") and str(o.get("round")) == rnd and "id" in o:
+                        done.add(int(o["id"]))
+                except (ValueError, TypeError):
+                    continue  # `check` reports these
     print("done:", ",".join(map(str, sorted(done))))
-    if "--ids" in rest:
-        want = [int(t) for a in rest[rest.index("--ids") + 1:] for t in a.replace(",", " ").split() if t.isdigit()]
+    if want is not None:
         print("todo:", ",".join(str(i) for i in want if i not in done))
 
 
