@@ -4,13 +4,13 @@
     "name": "robbydf"
   },
   "metadata": {
-    "description": "Claude Code plugin for culling and editing photos in LightCraft (Windows tested; macOS and Linux best effort)."
+    "description": "Claude Code plugin for culling, editing and exporting photos in LightCraft (Windows tested; macOS and Linux best effort)."
   },
   "plugins": [
     {
       "name": "lightcraft",
       "source": "./",
-      "description": "Cull and edit photos in LightCraft from Claude Code (Windows tested; macOS and Linux best effort)."
+      "description": "Cull, edit and export photos in LightCraft from Claude Code (Windows tested; macOS and Linux best effort)."
     }
   ]
 }

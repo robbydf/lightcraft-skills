@@ -97,3 +97,13 @@ for `mask.adjust`.
 ## Review
 
 - `review.phone_sbs`: true (also make a BEFORE | AFTER image per photo for phones)
+
+## Export
+
+Lookup order: `export.<target>.<key>`, then `export.<key>`, then the default shown. Targets live in
+`skills/lightcraft-export/targets/` (default target: `google-photos`).
+
+- `export.min_rating`: 3 (picks at this rating and above)
+- `export.people`: the `people.own` names (a pick is exported when one of them is named on a face)
+- `export.google-photos.root`: the folder Google Drive for desktop backs up to Google Photos, e.g. `D:/Photos/GooglePhotos` (no default)
+- `export.google-photos.staging`: `<parent of root>/.lc-staging` (same drive, never inside the backed-up folder)

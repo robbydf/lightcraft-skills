@@ -9,6 +9,7 @@ renders, and asks you before anything that depends on your taste.
 | `lightcraft-mcp` | `start`: launch LightCraft with its control port, check the CLI and MCP bridge, and register the `lightcraft` MCP server with Claude Code. `stop`: disconnect and close LightCraft gracefully. |
 | `lightcraft-cull` | Cull a day or a whole library. The best frame of each burst and usable singles get picked, clear failures get the reject flag, and everything else stays unmarked. Big libraries run chunk by chunk in subagents, with an optional 3-reviewer panel for borderline frames. Every mark is logged and can be rolled back. |
 | `lightcraft-edit` | Edit only the photos you name: approved looks per scene type, measured subject lifts with SAM 3 or Auto Mask, local masks (signs, food, details), opt-in bystander removal, AI Denoise, and straightening. The output is a review page plus phone-sized before/after images. |
+| `lightcraft-export` | `/lightcraft-export [target] [trip]` (default target `google-photos`): export a trip's picks that show your own people (from LightCraft's face naming) at the target's settings into a folder the platform picks up. For Google Photos this is 16 MP sRGB JPEG with the date and GPS kept, into a folder Google Drive for desktop backs up. It is read-only on the catalog, never overwrites, and a manifest makes reruns skip what was already exported. |
 
 ## Install
 
@@ -80,6 +81,7 @@ no-op on 0.21.1. It's kept for a future LightCraft that needs auth. Never commit
 skills/lightcraft-mcp/SKILL.md
 skills/lightcraft-cull/SKILL.md   plus panel-brief.md (the borderline panel's reviewer brief)
 skills/lightcraft-edit/SKILL.md
+skills/lightcraft-export/SKILL.md plus targets/<target>.md (one per platform: google-photos.md)
 scripts/
   lc-env.sh             sourced by every Bash call: sets CLI, LC_SCRIPTS, LC_PY, RUNS, PREFS, M, LCX
   find_lightcraft.py    install folder detection (Windows, macOS, Linux)
@@ -97,6 +99,9 @@ scripts/
   seg-chain.sh                      one SAM 3 prompt mask over several people, waiting for each part
   export-ids.sh                     export photos as ID-SUFFIX.jpg (no id token in export names)
   tiltprev.py                       tilt preview sheet (-6..+6 deg) for the user to pick an angle
+  export_picks.py                   export selection: picks with your own people, review list, manifest skip
+  export_stage.py export-stage.sh   batched export into a watched folder: same-drive staging, no overwrite,
+                                    manifest with crash recovery, edit-history signatures
 preferences.example.md
 ```
 
@@ -110,6 +115,8 @@ GitHub Actions runs them on Windows, macOS and Linux (`.github/workflows/tests.y
   run, and logs every mark. `runstate.py rollback` prints the commands to undo them.
 - The edit skill records each photo's history cursor before changing it, so it can restore it.
 - Neither skill rates, flags or edits outside the photos it was given.
+- The export skill never marks or edits anything: it checks afterwards that no rating or flag changed.
+  It never overwrites or deletes in the export folder, and it never uploads or signs in anywhere.
 
 ## Using LightCraft while a run is going
 
