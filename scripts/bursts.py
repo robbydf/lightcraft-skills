@@ -18,7 +18,21 @@ rated=/flagged=/edited= ids. A group's key is its first photo id.
 import argparse
 import json
 import sys
+import re
 from datetime import datetime
+
+
+def parse_time(s):
+    """ISO time as LightCraft writes it, on any Python 3.9+ (before 3.11 fromisoformat needs a 3- or
+    6-digit fraction and no 'Z'). The wall-clock time is kept and any offset dropped."""
+    s = s.strip()
+    if s.endswith(("Z", "z")):
+        s = s[:-1] + "+00:00"
+    m = re.match(r"^(.*?[T ]\d\d:\d\d:\d\d)\.(\d+)(.*)$", s)
+    if m:
+        s = f"{m.group(1)}.{(m.group(2) + '000000')[:6]}{m.group(3)}"
+    t = datetime.fromisoformat(s)
+    return t.replace(tzinfo=None)  # compare as written: a mix of 'Z' and plain times must not crash
 
 
 def load_photos(path):
@@ -36,7 +50,7 @@ def group_photos(photos, gap):
     # Virtual copies share capture time with their master and would form a false burst.
     photos = [p for p in photos if p.get("captured") and not p.get("deleted") and not p.get("copyOf")]
     for p in photos:
-        p["_t"] = datetime.fromisoformat(p["captured"])
+        p["_t"] = parse_time(p["captured"])
     # EXIF capture time is whole seconds; file name breaks ties within a second.
     photos.sort(key=lambda p: (p["_t"], p["fileName"]))
     groups, cur = [], []

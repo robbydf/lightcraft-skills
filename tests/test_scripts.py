@@ -133,6 +133,15 @@ class Bursts(unittest.TestCase):
         self.assertNotIn("1=A", out)
 
 
+class BurstTimes(unittest.TestCase):
+    def test_parse_time_old_python_forms(self):
+        from bursts import parse_time
+        self.assertEqual(parse_time("2026-01-01T10:00:00.5").microsecond, 500000)
+        self.assertEqual(parse_time("2026-01-01T10:00:00Z").hour, 10)
+        self.assertEqual(parse_time("2026-01-01T10:00:00.123456789+09:00").microsecond, 123456)
+        self.assertLess(parse_time("2026-01-01T10:00:00Z"), parse_time("2026-01-01T10:00:01"))
+
+
 class EditLog(unittest.TestCase):
     def test_init_start_done_check(self):
         run_dir = os.path.join(tempfile.mkdtemp(), "lib")
