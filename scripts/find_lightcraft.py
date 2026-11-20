@@ -6,8 +6,8 @@ Order: --dir argument, $LIGHTCRAFT_DIR, LIGHTCRAFT_DIR in <LIGHTCRAFT_HOME>/conf
   macOS:   /Applications and ~/Applications: LightCraft.app, ArtCraft/LightCraft.app (Contents/MacOS)
   Linux:   lightcraft-cli on PATH, /opt/lightcraft, /opt/LightCraft, /opt/ArtCraft/LightCraft,
            ~/.local/share/lightcraft, ~/.local/opt/lightcraft
-Exit 1 (and print nothing) if none is found. Standard library only.
-Usage: python find_lightcraft.py [--dir <folder>]
+Exit 1 (and print nothing) if none is found, 2 on a usage error. Standard library only.
+Usage: python find_lightcraft.py [--dir <folder>] | --help
 """
 import glob
 import os
@@ -136,10 +136,14 @@ def find(arg=""):
 
 def main(argv):
     arg = ""
-    if len(argv) >= 2 and argv[0].lower() in ("--dir", "-dir"):
+    if argv and argv[0].lower() in ("-h", "--help", "-help", "/?"):
+        print(__doc__)
+        return
+    if len(argv) == 2 and argv[0].lower() in ("--dir", "-dir"):
         arg = argv[1]
     elif argv:
-        sys.exit(__doc__)
+        print(__doc__, file=sys.stderr)
+        sys.exit(2)
     d = find(arg)
     if not d:
         sys.exit(1)

@@ -38,7 +38,7 @@ Edit only the photos the user names, or a scene type they approved for a batch. 
     there use a Windows-style path (`cygpath -m "$RUN"` gives `C:/Users/...`). Never call `$CLI` from
     a Python subprocess; run CLI commands from Bash. In testing, a worker hit both.
   - **Two kinds of scripts:** the standard-library ones (`editlog.py`, `runstate.py`, `looks.py`,
-    `people.py`, `review.py`, `bursts.py`) run as `python -I "$LC_SCRIPTS/<name>.py"`. The image
+    `people.py`, `review.py`, `bursts.py`, `lcjson.py`) run as `python -I "$LC_SCRIPTS/<name>.py"`. The image
     helpers (`measure.py`, `lfit.py`, `rgb.py`, `sbs.py`, `tiltprev.py`) run **only** through `M` and
     `LCX`, which use `"$LC_PY" -E`: `-I` hides Pillow and numpy installed with `pip --user`, and the
     helper then reports them missing.
@@ -62,6 +62,9 @@ Edit only the photos the user names, or a scene type they approved for a batch. 
       single Python start. Use it for before/after numbers on a whole chunk: about 100 separate
       `M` calls were the slowest part of a chunk in testing.
     - `grid`.
+    - `corners`: lens corner darkening, for the vignette rule (see Daylight adjustments). Give it
+      every unedited render of one venue and lens (3 or more) and read the `MEDIAN` line it adds:
+      single frames are swayed by the scene (sky, a dark doorway).
   - `-Region x0,x1,y0,y1` takes fractions of the frame, and `-Out` must end in `.png`. `M mean`
     always needs `-Region` (use `0,1,0,1` for the whole frame).
 - **GPU rendering (once per run, before the first denoise; the orchestrator, never a worker).** Run
@@ -94,6 +97,18 @@ Edit only the photos the user names, or a scene type they approved for a batch. 
   - `rgb.py <file> x0,x1,y0,y1`: mean R/G/B of a region, for colour checks (signs, food, skin).
   - `sbs.py -Before <f> -After <f> -Region x0,x1,y0,y1 -Out <f.jpg>`: a labelled BEFORE | AFTER
     side-by-side for viewing on a phone, at most 1600 px wide.
+- **Reading CLI output:** pipe one call into `lcjson.py` instead of parsing JSON by hand (the CLI
+  output starts with a blank line, or one line per command, which broke a worker's `json.load`):
+  ```bash
+  "$CLI" run --connect history.list id=ID | python -I "$LC_SCRIPTS/lcjson.py" cursor   # 12, or null
+  "$CLI" run --connect develop.get id=ID  | python -I "$LC_SCRIPTS/lcjson.py" crop     # angle, crop % per edge
+  "$CLI" run --connect develop.get id=ID  | python -I "$LC_SCRIPTS/lcjson.py" masks    # mask count
+  "$CLI" run --connect develop.get id=ID  | python -I "$LC_SCRIPTS/lcjson.py" seg NAME # mask id, parts, parts with seg data
+  python -I "$LC_SCRIPTS/editlog.py" "$RUN" done-ids <round> --ids 501,502           # done: … / todo: …
+  ```
+- **Id lists** (`--ids` of `runstate.py`, `denoise-wait.sh`, `editlog.py done-ids`): `501,502,503`,
+  `501 502 503` and (runstate) ranges `501-505` all work. Before 0.1.13, `runstate.py marks --ids 501
+  502` silently checked only 501.
 - MCP tools may be deferred. Load them in one ToolSearch call:
   `select:mcp__lightcraft__render_preview,mcp__lightcraft__set_develop,mcp__lightcraft__get_develop,mcp__lightcraft__export`.
 
@@ -111,8 +126,10 @@ Edit only the photos the user names, or a scene type they approved for a batch. 
 0. Once per session (or batch), before the first edit: save the marks, for the check at the end
    (see "Marks" under Batches): `"$CLI" run --connect catalog.query limit=100000 > "$SP/marks-before.json"`.
 
-1. Record its history: `"$CLI" run --connect history.list id=ID` gives `cursor`, which is `null` if it
-   was never edited.
+1. Record its history: `"$CLI" run --connect history.list id=ID | python -I "$LC_SCRIPTS/lcjson.py" cursor`
+   prints the `cursor`, which is `null` if it was never edited. Record it **before every step you may
+   take back** (a straightening, a mask), not only before the first: in testing, a worker ran
+   `crop.autoStraighten` on six photos in one loop before reading their cursors.
 2. Note its masks: `get_develop {id}` → `masks`.
 3. Append `{"id":ID,"cursor":<cursor>,"masksBefore":<count>}` to `$RUN/edits.jsonl` with the helper,
    which always writes valid JSON:
@@ -260,7 +277,9 @@ first masked photo of that kind and wait before masking the rest.
 
 **Daylight adjustments:**
 - **Flat or overcast frame:** dehaze 6.
-- **Lens already darkens the corners:** vignette 0.
+- **Lens already darkens the corners:** vignette 0. Decide it once per venue and lens with
+  `M corners` on the unedited renders (3 or more frames): only a `MEDIAN … lens_darkening=likely` line
+  counts. `unsure` or `no` keeps the look's vignette; say which in the report.
 - **Dark frame:** if the mean of the whole frame (`M mean -Region 0,1,0,1`) is under 100, add
   `light.exposure` `exposure.boost` (see Global exposure boosts).
 - **Shaded lower half still near-black:** if the bottom half stays near-black (mean under 40), raise
@@ -441,6 +460,16 @@ coordinates from it: fractions of the full frame, as the grid labels show.
      other person **to the same mask** with
      `library.select 'ids=[ID]' mask.addComponent id=N op=add kind=prompt 'text=girl in blue jacket'`.
      Both calls return `pending`. Poll `get_develop {id}` until the new component has its `seg` data.
+     **For two or more people use the helper**, as a background tool call, then short polls:
+     ```bash
+     bash "$LC_SCRIPTS/seg-chain.sh" "$SP" ID Subject "man with glasses" "boy in dark jacket"
+     timeout 170 bash -c 'until [ -f "$0/seg-ID.done" ]; do sleep 5; done' "$SP"; cat "$SP/seg-ID.done"   # repeat until MASK=N …
+     ```
+     It loads SAM 3, adds each prompt to one mask and waits for each part's `seg` data. Then do the
+     coverage check.
+     - **A prompt that finds nothing stays `pending` for ever, with no error** (tested: "lamp post",
+       "wall clock" on a frame with neither). A part with no `seg` data after about 5 min was not
+       found: use a more specific prompt, or clicked points.
      - Allow 20–40 s for the first prompt, and up to about 4 min for each added one: the app also
        re-processes the earlier parts.
      - Never use a sentence-long prompt: one found nothing in 4½ min.
@@ -464,7 +493,9 @@ coordinates from it: fractions of the full frame, as the grid labels show.
    The subject should be blown out and the background unchanged.
    - Where +3 is hard to read (it often only brightens the subject a little), use a colour overlay instead:
      `mask.adjust id=N 'values={"tint":100,"saturation":100,"exposure":1}'`. Everything masked turns
-     magenta. Set the real values afterwards, the same as after +3.
+     magenta, or red-orange on warm tungsten frames (tested on a 2641 K carrousel frame): judge the
+     coloured area's edge against the unmasked part, not the hue. Set the real values afterwards, the
+     same as after +3.
    - Fix spill with `mask.objectPoint … exclude=true` (clicked-point masks only).
    - **Never leave the +3 value.**
    - If the mask is still wrong after two fixes, run `mask.delete id=N` and use Path B.
@@ -619,8 +650,12 @@ ISO `denoise.iso_candidate` (default 3200) or above makes a photo a **candidate*
      loop: in testing, an unquoted `$CLI` killed one silently. In testing, workers also spent many
      turns on 180 s foreground polls. The helper must have exited before the report (see "finish
      with nothing running").
-   - **A plain `sleep N` in a foreground call is blocked** for workers; the `until` loop above (with
-     a `timeout` that covers the wait) is the way to wait.
+   - **A plain `sleep N` in a foreground call is blocked** for workers; the `until` loop above is the
+     way to wait. **Keep each foreground wait under about 170 s:** a foreground call that runs past
+     180 s is moved to the background. For a longer wait, run the helper as a background tool call
+     and poll its marker with short foreground calls:
+     `timeout 170 bash -c 'until [ -f "$0/denoise.done" ]; do sleep 5; done' "$SP"; ls "$SP/denoise.done"`
+     (repeat until the file is listed).
    - **Speed:** on an entry-level GPU (MX130) 21 frames took about 7 minutes (about 20 s each); on the
      CPU 22 frames took about 25 minutes. If it runs on the CPU, see GPU rendering in Setup. The
      built-in denoiser needs no download.
@@ -684,6 +719,16 @@ Follow `straighten` in the preferences:
      In testing it gave -2.44° and the lines then measured level; the user approved it.
      Read the `history.list` cursor before it, so it can be taken back with `history.restore` (see
      Revert). If it returns `changed:false`, it did nothing: don't undo anything.
+   - **`crop.autoStraighten` is unstable across a burst:** on five near-identical carrousel frames it
+     gave -3.0 to -4.6°. Measure one angle per burst (or per venue set shot from one spot) on its
+     clearest frame, apply that same angle to the others, and re-measure one of them.
+   - **Don't use `crop.autoStraighten` on views looking down** (a street from a window, a rooftop
+     view): there it gave small angles the other way from the kerb's `lfit.py` fit (+0.47° against
+     -2.0°). Fit a kerb, a building edge or a window column with `lfit.py`, or make a tilt sheet.
+   - **Lines that fan out from perspective** (carrousel poles, a wide angle close to a subject): no
+     rotation makes them all vertical. Rotate only by what a centre vertical or the horizon says, and
+     when nothing central settles it, leave it: say "perspective, left as is" in the report rather
+     than adding a tilt card. A building that leans in from both sides is a keystone (below).
    - **Light-show and night frames still get this check.** A floodlit castle against a black sky is
      not exempt: in testing the user asked for alignments on 4 castle frames that had none.
    - **When the measurements can't settle it** (tapered towers, `lfit.py` and `crop.autoStraighten`
@@ -702,8 +747,8 @@ Follow `straighten` in the preferences:
      `library.select 'ids=[ID]' crop.straighten angle=<deg>` (-45 to 45, positive = clockwise; it
      keeps the largest crop). Try the measured correction, re-export, re-measure, and flip the sign if
      it got worse. It worked on 5 of 5 test photos (0.7–3.8°, 0.9–4.4 % crop per edge).
-     After a rotation set `set_develop {id, settings: {geometry: {constrain_crop: true}}}` so no
-     blank corners show (in testing +5.5° cost a 6.1 % crop per edge, which the user accepted).
+     `crop.straighten` (and `develop.set` `crop.angle`) keep the crop inside the photo by themselves,
+     so no blank corners show (in testing +5.5° cost a 6.1 % crop per edge, which the user accepted).
      - When a smaller angle saves important content and keeps the verticals within ±0.7°, use it:
        1.8° instead of 2.5° kept a sign board in frame.
    - **Keystone** (camera tilted up: left verticals lean one way, right ones the other, for example
@@ -721,8 +766,15 @@ Follow `straighten` in the preferences:
 4. Keep the correction only if it measures better. Otherwise take it back with `history.restore` to
    the cursor read before it (never `edit.undo`), and add a `decide` with the
    numbers, and a test render if one exists.
-5. If you keep a correction, run `set_develop {id, settings: {geometry: {constrain_crop: true}}}` and
-   say what the crop cuts off. If it cuts into the main subject, add a `decide`.
+5. If you keep a correction, read the crop it cost:
+   `"$CLI" run --connect develop.get id=ID | python -I "$LC_SCRIPTS/lcjson.py" crop` prints the angle,
+   `crop_per_edge` (the largest edge cut, in % of the frame) and `constrain_crop`. Report that number
+   instead of estimating it from the angle, and say what the crop cuts off. A crop over 5 % (over 12 %
+   for a keystone `geometry.upright`), or one that cuts into the main subject, gets a `decide`.
+   - After `geometry.upright` or `geometry.guides` (transforms, not a crop rotation),
+     `constrain_crop` must be `true` so no blank edges show. Only the MCP tool sets it:
+     `set_develop {id, settings: {geometry: {constrain_crop: true}}}`; `develop.set` from the CLI
+     rejects `geometry.constrain_crop` ("unknown control"). Check it with `lcjson.py crop`.
 
 ## Batches (more than 5 photos)
 

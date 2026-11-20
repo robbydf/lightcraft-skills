@@ -25,8 +25,11 @@ else
 fi
 export LIGHTCRAFT_HOME="$LC_HOME"   # find_lightcraft.py reads the same config.env
 case "$OSTYPE" in msys*|cygwin*|win*) LC_EXE=".exe" ;; *) LC_EXE="" ;; esac
-if command -v python >/dev/null 2>&1; then LC_PY=python
-else LC_PY=python3; python() { python3 "$@"; }   # macOS / Linux often have only python3
+if command -v python >/dev/null 2>&1 && python -c "" >/dev/null 2>&1; then LC_PY=python
+elif command -v python3 >/dev/null 2>&1; then LC_PY=python3; python() { python3 "$@"; }   # macOS / Linux often have only python3
+else
+  LC_PY=python
+  echo "lc-env: Python 3 not found (neither python nor python3 runs). Install Python 3.9+ and add it to PATH; the helper scripts need it." >&2
 fi
 LC_CFG="$LC_HOME/config.env"
 if [ -f "$LC_CFG" ]; then

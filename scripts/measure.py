@@ -12,6 +12,12 @@ Modes:
           (default 600) and labelled with its file name, into one PNG (-Out). 9 per sheet reads well.
   batch : one list file, one measurement per line: <image>|x0,x1,y0,y1[|label]. Prints mean, blown
           and crushed for every line (before/after on many photos in one start).
+  corners: lens corner darkening (for the vignette rule). Per corner, the mean of an 8 % box in the
+          corner over the mean of the two 8 % boxes at the middle of its two edges, then a verdict:
+          "likely" when all four ratios are under 0.85, "no" when two or more are 0.95 or above,
+          otherwise "unsure". Measure an unedited render (no look vignette). Scene content (sky, a
+          dark doorway) moves single ratios: give all frames of one venue and lens (3 or more) and use
+          the MEDIAN line it adds, which averages the content out.
   grid  : one file; draws labelled coordinate lines over the region (every 0.01, labels every 0.05)
           and writes a PNG (-Out), for reading guide / brush / mask-point coordinates.
 
@@ -29,7 +35,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from lcargs import fix_argv  # noqa: E402
 from lcimg import Image, ImageDraw, box, files, font, gray, load_rgb, np, parse_region, save, native_path  # noqa: E402
 
-MODES = ("sharp", "tilt", "mean", "clip", "crops", "sheet", "batch", "grid")
+MODES = ("sharp", "tilt", "mean", "clip", "crops", "sheet", "batch", "grid", "corners")
 
 
 class Cache:
@@ -68,6 +74,40 @@ def mean(path, r):
     if c.size == 0:
         return "mean=NA (region too small)"
     return f"mean={c.mean(dtype=np.float64):.1f}"
+
+
+def corner_ratios(path, k=0.08):
+    g = gray(CACHE.rgb(path))
+    h, w = g.shape
+
+    def m(x0, y0):
+        c = g[int(y0 * h):int((y0 + k) * h), int(x0 * w):int((x0 + k) * w)]
+        return float(c.mean(dtype=np.float64)) if c.size else float("nan")
+    lo, mid = 1 - k, 0.5 - k / 2
+    top, bottom, left, right = m(mid, 0), m(mid, lo), m(0, mid), m(lo, mid)
+    named = {"tl": (m(0, 0), top, left), "tr": (m(lo, 0), top, right),
+             "bl": (m(0, lo), bottom, left), "br": (m(lo, lo), bottom, right)}
+    return {n: (c / ((a + b) / 2) if (a + b) > 1 else float("nan")) for n, (c, a, b) in named.items()}
+
+
+def corner_verdict(ratios):
+    vals = [v for v in ratios.values() if v == v]
+    if len(vals) == 4 and all(v < 0.85 for v in vals):
+        verdict = "likely"
+    elif sum(v >= 0.95 for v in vals) >= 2:
+        verdict = "no"
+    else:
+        verdict = "unsure"
+    return " ".join(f"{n}={v:.2f}" for n, v in ratios.items()) + f" lens_darkening={verdict}"
+
+
+def corners(fs):
+    per = [(f, corner_ratios(f)) for f in fs]
+    out = [f"{os.path.basename(f)}  {corner_verdict(r)}" for f, r in per]
+    if len(per) >= 3:  # the lens is the same on every frame; scene content averages out
+        med = {n: float(np.nanmedian([r[n] for _, r in per])) for n in ("tl", "tr", "bl", "br")}
+        out.append(f"MEDIAN of {len(per)}  {corner_verdict(med)}")
+    return out
 
 
 def clip(path, r):
@@ -246,6 +286,8 @@ def main(argv):
         if len(fs) != 1:
             sys.exit("batch takes one list file: <image>|x0,x1,y0,y1[|label] per line")
         out = batch(fs[0])
+    elif m == "corners":
+        out = corners(fs)
     elif m == "grid":
         if len(fs) != 1:
             sys.exit("grid takes exactly one file")

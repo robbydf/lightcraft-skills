@@ -15,10 +15,10 @@ Commands (photos.json = fresh `catalog.query limit=100000` output):
         {"ids": [...], "picks": [...], "unpick": [...], "reason": {"id": "panel 3-0 keep"}}
         picks -> rating 3; unpick -> rating 0 (only this run's own picks). Applied in order after
         the group lines by check, summary, picks and rollback.
-  python -I runstate.py check    RUN photos.json [--ids 1,2,3]
+  python -I runstate.py check    RUN photos.json [--ids 1,2,3 | 1 2 3 | 1-5]
         compare the catalog with baseline + log; prints mismatches and changes the user made;
         exit 1 if anything is off
-  python -I runstate.py marks    BEFORE.json NOW.json [--ids 1,2,3]
+  python -I runstate.py marks    BEFORE.json NOW.json [--ids 1,2,3 | 1 2 3 | 1-5]
         compare ratings and flags of two catalog.query snapshots (no RUN needed): the edit skill's
         check that editing changed no mark; exit 1 if any differ
   python -I runstate.py summary  RUN                    counts per day, and the reject and unsure lists
@@ -291,15 +291,24 @@ def cmd_rollback(run, day=None):
 
 
 def ids_arg(rest):
+    """The ids after --ids: "1,2,3", "1 2 3" (separate arguments) or ranges "1-5", up to the next --flag."""
     if "--ids" not in rest:
         return None
-    k = rest.index("--ids")
-    if k + 1 >= len(rest) or not rest[k + 1].strip():
-        sys.exit("--ids needs a comma-separated list of ids")
-    try:
-        return {int(x) for x in rest[k + 1].split(",") if x.strip()}
-    except ValueError:
-        sys.exit(f"--ids: not a list of ids: {rest[k + 1]!r}")
+    k = rest.index("--ids") + 1
+    toks = []
+    while k < len(rest) and not rest[k].startswith("--"):
+        toks += [t for t in rest[k].replace(",", " ").split() if t]
+        k += 1
+    if not toks:
+        sys.exit("--ids needs a list of ids, e.g. --ids 1,2,3 (or 1 2 3, or 1-5)")
+    out = set()
+    for t in toks:
+        a, dash, b = t.partition("-")
+        try:
+            out |= set(range(int(a), int(b) + 1)) if dash else {int(t)}
+        except ValueError:
+            sys.exit(f"--ids: not an id or range: {t!r}")
+    return out
 
 
 def main():

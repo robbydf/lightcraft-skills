@@ -52,18 +52,21 @@ Everything personal lives outside the plugin, in `~/.claude/lightcraft/` (or `$L
 | `config.env` | Optional `KEY=value` lines: `LIGHTCRAFT_DIR` (the install folder, written automatically after the first detection) and `LIGHTCRAFT_RUNS` (where run state is kept; default `~/.claude/lightcraft/runs`). |
 | `runs/<library>/` | Durable cull and edit state: `baseline.json`, `log.jsonl`, `edits.jsonl`. |
 
-**Install folder detection,** in this order:
-1. the `LIGHTCRAFT_DIR` environment variable;
-2. `LIGHTCRAFT_DIR` in `config.env`;
-3. then per system:
-   - **Windows:** the uninstall entries in the registry, then `Program Files\ArtCraft\LightCraft`,
-     `Program Files\LightCraft` or `%LOCALAPPDATA%\Programs\…`;
-   - **macOS:** `LightCraft.app` or `ArtCraft/LightCraft.app` in `/Applications` or `~/Applications`
-     (the CLI in `Contents/MacOS`);
-   - **Linux:** `lightcraft-cli` on `PATH`, `/opt/lightcraft`, `/opt/ArtCraft/LightCraft`,
-     `~/.local/share/lightcraft`.
+**Install folder detection,** in this order (the same as `scripts/find_lightcraft.py`):
+1. the folder given on the command line (`--dir` to `find_lightcraft.py`, `-LightCraftDir` to
+   `lightcraft-mcp.py`);
+2. the `LIGHTCRAFT_DIR` environment variable;
+3. `LIGHTCRAFT_DIR` in `config.env`;
+4. then per system:
+   - **Windows:** the uninstall entries in the registry, then `ArtCraft\LightCraft` or `LightCraft`
+     in `Program Files`, `Program Files (x86)` and `%LOCALAPPDATA%\Programs`;
+   - **macOS:** `LightCraft.app`, `ArtCraft/LightCraft.app`, `ArtCraft LightCraft.app` or any
+     `*LightCraft*.app` in `/Applications` or `~/Applications` (the CLI in `Contents/MacOS`);
+   - **Linux:** `/opt/lightcraft`, `/opt/LightCraft`, `/opt/ArtCraft/LightCraft`, `/usr/lib/lightcraft`,
+     `~/.local/share/lightcraft`, `~/.local/opt/lightcraft`;
+5. last, on every system, the folder of `lightcraft-cli` on `PATH`.
 
-`python scripts/find_lightcraft.py` prints what it finds.
+`python scripts/find_lightcraft.py` prints what it finds (`--help` for the options).
 
 **Token:** LightCraft 0.21.1 has no auth on its control port (127.0.0.1 only), so no token is needed.
 `-TokenFile` / `LIGHTCRAFT_TOKEN_FILE` only sets `LIGHTCRAFT_TOKEN` inside the start script, which is a
@@ -81,15 +84,17 @@ scripts/
   lc-env.sh             sourced by every Bash call: sets CLI, LC_SCRIPTS, LC_PY, RUNS, PREFS, M, LCX
   find_lightcraft.py    install folder detection (Windows, macOS, Linux)
   lightcraft-mcp.py     start / stop
-  measure.py            sharp, tilt, mean, clip, crops, sheet (contact sheet), batch (many boxes), grid
+  measure.py            sharp, tilt, mean, clip, crops, sheet (contact sheet), batch (many boxes), grid, corners
   lfit.py rgb.py sbs.py   line fit, region colour, phone before|after images
   lcimg.py lcargs.py    shared image code (Pillow + numpy) and PowerShell-style options
   bursts.py runstate.py review.py   burst grouping, durable run state, review page
-  editlog.py                        valid edits.jsonl lines (start, done, check --fix)
+  editlog.py                        valid edits.jsonl lines (start, done, done-ids, check --fix)
+  lcjson.py                         read CLI output: history cursor, crop % per edge, masks, SAM parts
   people.py                         photo -> named people map from LightCraft face naming
   looks.py                          look presets vs preferences; end-of-chunk develop check
   denoise-wait.sh                   wait for the denoise queue and the listed photos (--ids), write a marker
   seg-wait.sh                       prepare SAM 3 for a photo and wait until it is ready
+  seg-chain.sh                      one SAM 3 prompt mask over several people, waiting for each part
   export-ids.sh                     export photos as ID-SUFFIX.jpg (no id token in export names)
   tiltprev.py                       tilt preview sheet (-6..+6 deg) for the user to pick an angle
 preferences.example.md
@@ -97,6 +102,7 @@ preferences.example.md
 
 Tests (no LightCraft needed; the image tests skip without Pillow and numpy):
 `python -E -m unittest discover -s tests -v` from the repo root (`python3` on macOS and Linux).
+GitHub Actions runs them on Windows, macOS and Linux (`.github/workflows/tests.yml`).
 
 ## Safety
 

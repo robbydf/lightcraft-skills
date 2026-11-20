@@ -21,8 +21,9 @@ python "<base>/../../scripts/lightcraft-mcp.py" stop
 - **Install folder:** found automatically by `find_lightcraft.py` in this order: `-LightCraftDir`,
   the `LIGHTCRAFT_DIR` environment variable, `LIGHTCRAFT_DIR=` in `~/.claude/lightcraft/config.env`,
   then per system: the registry and `Program Files\ArtCraft\LightCraft` (Windows),
-  `/Applications/LightCraft.app/Contents/MacOS` (macOS), `lightcraft-cli` on `PATH` or `/opt/lightcraft`
-  (Linux). That folder holds the GUI (`lightcraft.exe`; `lightcraft` or `LightCraft` elsewhere) and the
+  `/Applications/LightCraft.app/Contents/MacOS` (macOS), `/opt/lightcraft` and similar (Linux), and
+  last `lightcraft-cli` on `PATH` (the full list is in the README).
+  That folder holds the GUI (`lightcraft.exe`; `lightcraft` or `LightCraft` elsewhere) and the
   CLI and bridge (`lightcraft-cli.exe`; `lightcraft-cli` elsewhere).
 - **Control address:** `127.0.0.1:7980`.
 - **MCP server name in Claude Code:** `lightcraft`.

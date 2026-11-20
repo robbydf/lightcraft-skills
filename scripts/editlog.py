@@ -6,6 +6,8 @@ Usage:
   python -I editlog.py RUN start ID CURSOR MASKS ROUND   # CURSOR: a number or null
   python -I editlog.py RUN done ID ROUND [key=value ...]  # extra fields, e.g. look=night denoise=50
   python -I editlog.py RUN check [--fix]                  # list invalid lines; --fix repairs None/True/False
+  python -I editlog.py RUN done-ids ROUND [--ids 1,2,3]   # ids with a done line in ROUND (comma list);
+                                                          # with --ids, also "todo:" the listed ids not done
 
 Always valid JSON (null, true, false), one object per line, appended. `check --fix` keeps a backup
 edits.before-fix.jsonl and only repairs lines that parse once Python literals are replaced.
@@ -71,6 +73,21 @@ def check(run, fix):
     return 1 if bad else 0
 
 
+def done_ids(run, rnd, rest):
+    done = set()
+    for line in open(os.path.join(run, "edits.jsonl"), encoding="utf-8"):
+        try:
+            o = json.loads(line)
+        except ValueError:
+            continue  # `check` reports these
+        if isinstance(o, dict) and o.get("done") and str(o.get("round")) == rnd and "id" in o:
+            done.add(int(o["id"]))
+    print("done:", ",".join(map(str, sorted(done))))
+    if "--ids" in rest:
+        want = [int(t) for a in rest[rest.index("--ids") + 1:] for t in a.replace(",", " ").split() if t.isdigit()]
+        print("todo:", ",".join(str(i) for i in want if i not in done))
+
+
 def as_int(v, what):
     try:
         return int(v)
@@ -105,6 +122,8 @@ def main(argv):
             k, _, v = kv.partition("=")
             obj[k] = num(v)
         append(run, obj)
+    elif cmd == "done-ids" and rest:
+        done_ids(run, rest[0], rest[1:])
     elif cmd == "check":
         sys.exit(check(run, "--fix" in rest))
     else:

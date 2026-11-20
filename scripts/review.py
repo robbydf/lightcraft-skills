@@ -14,13 +14,15 @@ JSON object per photo:
 (default "Needs your decision"); the rest get Fine / Change buttons.
 
 The page is self-contained (no network), responsive, and refers to images by relative path, so keep
-OUT.html where it can reach the DIRs (it is usually written next to them). The viewer picks answers and
+OUT.html where it can reach the DIRs (it is usually written next to them). A DIR on another drive is
+linked by an absolute file:// URL, so that page only works on this computer. The viewer picks answers and
 presses "Copy my decisions", then pastes the text into the chat.
 """
 import argparse
 import html
 import json
 import os
+import pathlib
 import sys
 
 PAGE = r"""<!doctype html>
@@ -120,7 +122,10 @@ def main():
                     full = os.path.join(d, name)
                     if not os.path.exists(full):
                         problems.append(f"missing file {full}")
-                    return os.path.relpath(full, outdir).replace("\\", "/")
+                    try:
+                        return os.path.relpath(full, outdir).replace("\\", "/")
+                    except ValueError:  # another drive on Windows: no relative path exists
+                        return pathlib.Path(os.path.abspath(full)).as_uri()
 
                 pid = p["id"]
                 b, af = f"{pid}-before.jpg", f"{pid}-after.jpg"

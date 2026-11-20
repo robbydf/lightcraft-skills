@@ -96,6 +96,19 @@ class RunState(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertNotIn("Traceback", out)
 
+    def test_marks_ids_spaces_and_ranges(self):
+        now = os.path.join(self.t, "now2.json")
+        catalog(now, [{"id": 1}, {"id": 2}, {"id": 3, "rating": 3}, {"id": 4, "rating": 2}])
+        # 3 changed: space-separated ids must all be checked (before 0.1.13 only the first was)
+        code, out = run("runstate.py", "marks", self.p0, now, "--ids", "1", "3")
+        self.assertEqual(code, 1, out)
+        self.assertIn("compared 2 photos", out)
+        self.assertEqual(run("runstate.py", "marks", self.p0, now, "--ids", "1-3")[0], 1)
+        self.assertEqual(run("runstate.py", "marks", self.p0, now, "--ids", "1 2")[0], 0)
+        code, out = run("runstate.py", "marks", self.p0, now, "--ids", "1,x")
+        self.assertNotEqual(code, 0)
+        self.assertNotIn("Traceback", out)
+
     def test_bad_input_no_traceback(self):
         for args in (("log", self.run), ("log", self.run, '{"group":1,"ids":[],"picks":[],"rejects":[]}')):
             code, out = run("runstate.py", *args)
@@ -140,6 +153,51 @@ class EditLog(unittest.TestCase):
         self.assertEqual(run("editlog.py", run_dir, "check", "--fix")[0], 1)  # one line is not repairable
 
 
+class EditLogDoneIds(unittest.TestCase):
+    def test_done_ids(self):
+        run_dir = os.path.join(tempfile.mkdtemp(), "lib")
+        run("editlog.py", run_dir, "init")
+        for i in (1, 2):
+            run("editlog.py", run_dir, "start", i, "null", 0, "r1")
+        run("editlog.py", run_dir, "done", 1, "r1")
+        run("editlog.py", run_dir, "done", 2, "r2")
+        code, out = run("editlog.py", run_dir, "done-ids", "r1", "--ids", "1", "2,3")
+        self.assertEqual(code, 0, out)
+        self.assertIn("done: 1", out)
+        self.assertIn("todo: 2,3", out)
+
+
+class LcJson(unittest.TestCase):
+    def pipe(self, what, text, *extra):
+        r = subprocess.run([sys.executable, "-I", os.path.join(SCRIPTS, "lcjson.py"), what, *extra],
+                           input=text, capture_output=True, text=True)
+        return r.returncode, (r.stdout + r.stderr).strip()
+
+    def test_cursor_blank_line_and_select(self):
+        sel = json.dumps({"command": "library.select", "ok": True, "result": {"selected": 1}})
+        hist = json.dumps({"command": "history.list", "ok": True, "result": {"cursor": 7, "history": []}})
+        self.assertEqual(self.pipe("cursor", "\n" + sel + "\n" + hist + "\n"), (0, "7"))
+        null = json.dumps({"command": "history.list", "ok": True, "result": {"cursor": None}})
+        self.assertEqual(self.pipe("cursor", null), (0, "null"))
+        code, out = self.pipe("cursor", "")
+        self.assertEqual(code, 1)
+        bad = json.dumps({"command": "history.list", "ok": False, "error": "no photo"})
+        self.assertIn("no photo", self.pipe("cursor", bad)[1])
+
+    def test_crop_masks_seg(self):
+        r = {"crop": {"geometry": {"angle": 2.0, "rect": {"x0": 0.025, "x1": 0.975, "y0": 0.02, "y1": 0.98}}},
+             "geometry": {"constrain_crop": False, "upright": "off"},
+             "masks": [{"id": 3, "name": "Subject", "components": [{"shape": {"seg": "x"}}, {"shape": {}}]}]}
+        dev = json.dumps({"command": "develop.get", "ok": True, "result": r})
+        code, out = self.pipe("crop", dev)
+        self.assertEqual(code, 0, out)
+        self.assertIn("angle=2.0 crop_per_edge=2.5%", out)
+        self.assertIn("constrain_crop=false", out)
+        self.assertEqual(self.pipe("masks", dev), (0, "1"))
+        self.assertEqual(self.pipe("seg", dev, "Subject"), (0, "3 2 1"))
+        self.assertEqual(self.pipe("seg", dev, "Other"), (0, "none 0 0"))
+
+
 class FindLightCraft(unittest.TestCase):
     def test_env_dir(self):
         from find_lightcraft import CLI_NAME
@@ -151,6 +209,38 @@ class FindLightCraft(unittest.TestCase):
         self.assertEqual(os.path.normcase(out.strip()), os.path.normcase(d))
         code, out = run("find_lightcraft.py", "--dir", d, env={"LIGHTCRAFT_HOME": home})
         self.assertEqual(os.path.normcase(out.strip()), os.path.normcase(d))
+
+
+class FindLightCraftHelp(unittest.TestCase):
+    def test_help_and_usage(self):
+        code, out = run("find_lightcraft.py", "--help")
+        self.assertEqual(code, 0)
+        self.assertIn("Usage", out)
+        self.assertEqual(run("find_lightcraft.py", "--bogus")[0], 2)
+
+
+class ReviewPage(unittest.TestCase):
+    def test_other_drive_falls_back_to_file_url(self):
+        import importlib
+        from unittest import mock
+        review = importlib.import_module("review")
+        t = tempfile.mkdtemp()
+        d = os.path.join(t, "chunk")
+        os.makedirs(d)
+        for n in ("5-before.jpg", "5-after.jpg"):
+            open(os.path.join(d, n), "wb").close()
+        with open(os.path.join(d, "review.jsonl"), "w", encoding="utf-8") as f:
+            f.write(json.dumps({"id": 5, "title": "x"}) + "\n")
+        out = os.path.join(t, "page.html")
+
+        def boom(*a, **k):
+            raise ValueError("path is on mount 'D:', start on mount 'C:'")
+        with mock.patch.object(review.os.path, "relpath", boom), mock.patch.object(sys, "argv", ["review.py", out, d]):
+            with self.assertRaises(SystemExit) as e:
+                review.main()
+            self.assertIn(e.exception.code, (0, None))
+        with open(out, encoding="utf-8") as f:
+            self.assertIn("file:", f.read())
 
 
 @unittest.skipUnless(HAVE_IMG, "needs Pillow and numpy")
@@ -219,6 +309,25 @@ class ImageHelpers(unittest.TestCase):
         self.assertEqual(code, 0, out)
         with Image.open(o) as im:
             self.assertEqual(im.size[0], 300)
+
+    def test_corners(self):
+        import numpy as np
+        h, w = 400, 600
+        yy, xx = np.mgrid[0:h, 0:w]
+        r = np.hypot((xx - w / 2) / (w / 2), (yy - h / 2) / (h / 2)) / np.sqrt(2)
+        vig = (150 * (1 - 0.6 * r ** 2)).astype("uint8")
+        fs = []
+        for n, arr in (("v", vig), ("f", np.full((h, w), 150, "uint8"))):
+            for k in range(3):
+                p = os.path.join(self.t, f"c{n}{k}.png")
+                Image.fromarray(np.stack([arr] * 3, -1)).save(p)
+                fs.append(p)
+        code, out = run("measure.py", "corners", *fs[:3])
+        self.assertEqual(code, 0, out)
+        self.assertIn("MEDIAN of 3", out)
+        self.assertIn("lens_darkening=likely", out.splitlines()[-1])
+        code, out = run("measure.py", "corners", *fs[3:])
+        self.assertIn("lens_darkening=no", out.splitlines()[-1])
 
     def test_isolated_hint(self):
         r = subprocess.run([sys.executable, "-I", "-c", "import sys; sys.path.insert(0, r'%s'); import lcimg" % SCRIPTS],

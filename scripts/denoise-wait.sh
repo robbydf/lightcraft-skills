@@ -14,11 +14,15 @@
 # The marker says "done after Ns on gpu|cpu" (or "TIMEOUT ..."). Polls every --interval seconds
 # (default 20); gives up after --max seconds (default 3600). Failed polls ("drew no frame" during a
 # CPU denoise) are retried.
-SP="${1:?usage: denoise-wait.sh SP [--ids 1,2,3] [--interval 20] [--max 3600]}"; shift
+SP="${1:?usage: denoise-wait.sh SP [--ids 1,2,3 | --ids 1 2 3] [--interval 20] [--max 3600]}"; shift
 IDS=""; INTERVAL=20; MAX=3600
 while [ $# -gt 0 ]; do
   case "$1" in
-    --ids) IDS="${2//[[:space:]]/}"; shift 2 ;;
+    --ids) shift; IDS=""   # "1,2,3" or "1 2 3" (separate arguments), up to the next --flag
+      while [ $# -gt 0 ] && [ "${1#--}" = "$1" ]; do IDS="$IDS,${1//[[:space:]]/,}"; shift; done
+      IDS=$(printf '%s' "$IDS" | tr -s ',' | sed 's/^,//;s/,$//')
+      [ -n "$IDS" ] || { echo "denoise-wait: --ids needs ids" > "$SP/denoise.done"; exit 1; }
+      case "$IDS" in *[!0-9,]*) echo "denoise-wait: --ids: not a list of ids: $IDS" > "$SP/denoise.done"; exit 1 ;; esac ;;
     --interval) INTERVAL="$2"; shift 2 ;;
     --max) MAX="$2"; shift 2 ;;
     *) echo "denoise-wait: unknown argument $1" > "$SP/denoise.done"; exit 1 ;;
