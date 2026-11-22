@@ -400,6 +400,43 @@ nearby texture.
    - Figures standing across long straight lines leave stepped rails or a doubled edge at 100 %.
    - Figures overlapping the subject leave a trace.
    - Suggest a crop instead when it would remove them more cleanly.
+   - For a removal the spot tool can't do cleanly, suggest handing the photo to PhotoCraft (next section).
+
+## Hand-off to PhotoCraft
+
+PhotoCraft is ArtCraft's pixel editor (layers, retouching). LightCraft hands it a rendered copy. Only on
+the user's request for named photos, because each hand-off writes a large file and adds a library photo.
+
+```bash
+"$CLI" run --connect library.select 'ids=[ID]' photo.editInPhotoCraft
+```
+
+It takes no parameters and acts on the selected photo. It needs the GUI (`--connect`). Tested on 531
+(_RDF5035.ARW, November 2026):
+- **It took 28 s.** If PhotoCraft wasn't running, it started it with the copy open.
+- **It wrote `<name>-Edit.psd` next to the raw** (`E:\Photos\...\_RDF5035-Edit.psd`, 144 MB for a 24 MP
+  raw): 16-bit RGB, one flat image, no layers, no compression. The LightCraft edits are rendered in. On
+  531 the look and the 0.30 face lift matched LightCraft's own export: mean 68 against 66, average
+  per-pixel difference 6 of 255. A crop wasn't tested (531 has none).
+- **It added the PSD to the library as a new photo** and returned its id:
+  `{"copies":[{"id":1451,"original":531,"path":"...-Edit.psd"}],"id":1451,"original":531}`.
+  Record that id with the original in your notes.
+- **The original's develop settings and history stay as they were.**
+- **The copy's develop settings are all zero.** The edits are already in its pixels, so never apply a
+  look or a lift to the copy; that would double them. Batch runs (cull, face lift, looks) must skip
+  copies. Their ids aren't in a cull run's `people-by-photo.json`, so a batch built from it skips them
+  already.
+- **Later LightCraft edits to the original don't reach the PSD**, since it's a render. Finish the
+  LightCraft edit first, then hand off.
+- **Edits made in PhotoCraft** belong to PhotoCraft's own tools or skill. This skill only does the
+  hand-off. Leave the PhotoCraft window to the user, or to a PhotoCraft skill if one is installed.
+- **Not checked yet:** what LightCraft shows for the copy after PhotoCraft saves it, and what a
+  second hand-off of the same photo does (a new `-Edit-2.psd`, or overwriting the first).
+
+`photo.openOriginalInExternal` ("Open Original in Other Editor (RAW, no copy)") is the other entry in
+Photo › Edit In. It hands over the raw file itself: no copy, and none of the LightCraft edits.
+
+Don't hand off a photo while a batch run is going: the command changes the selection.
 
 ## AI Denoise (high ISO)
 

@@ -26,6 +26,14 @@ This is the subject-lift step of `lightcraft-edit`, kept as its own skill.
   the report or `edits.jsonl` shows an earlier shadow fix added `lift.face_shadow_global`, the
   "before" still includes it: say so, and don't add it again. Delete it only when it has to be
   remade (it fails the coverage check, or the user asks), and only after the cursor is recorded.
+  - **Check coverage for each main face**, not just the mask as a whole. Old masks often cover one
+    person only: in the all-photos run, two masks covered Enzo but not Sarah, the largest face. Add the
+    missing person to **the same mask** with `mask.addComponent id=N op=add kind=prompt 'text=…'` (or
+    clicked points), wait for its `seg` data as in Path A, then step the mask.
+  - **The table now says "no mask" but a lift mask exists:** keep it. If it's above the ladder's cap
+    (0.50 for the bright ladder), lower it to the cap. Otherwise leave its values as they are. Ask about
+    it on the review card ("old lift kept although the face is X % above the background: keep?").
+  - A mask you step or extend gets `temp 0`. Leave the temp of a mask you keep untouched.
 - Names in `backticks` such as `lift.mask.daylight` are keys in the preferences file (`$PREFS`).
   `M`, `LCX`, `$CLI` and the helpers are described in lightcraft-edit's Setup.
 - Every CLI call starts with `library.select 'ids=[ID]'`. Never use `edit.undo` or `edit.redo`; take
@@ -91,6 +99,9 @@ The first rule that fits wins:
   for `lift.daylight_dark_face` (default **about 75–85 % of the background mean, never above it**), but **the mask cap wins**: stop
   at `lift.daylight_mask_max` even when the face is still short, and report the ratio. Use the
   daylight ladder below, not the night one.
+  - **"Never above the background" wins over "always lift".** A face under 60 that already reads
+    within about 10 % of the background (a dark scene, faces of 53 against 58) takes the bright-face
+    ladder from 0.20, not the dark-face start.
   - A backlit face at 54 against trees and lawn (63 % of the background) got the 0.45 mask and reached
     82 %, and the user kept it.
   - In testing (overcast bamboo grove, dark hair against dark foliage), shadows 40 plus exposure up to
@@ -183,6 +194,12 @@ Measure on a render with the look applied and no mask. Report each box's region.
   shadowed eye sockets, glasses and specular highlights. Read the box off an `M grid` of the face,
   never a guess from the 1000 px view.
   - **Record the box** (x0,x1,y0,y1) in `report.md` and in the photo's `review.jsonl` `changes`.
+  - **Check each box on the image before measuring:** draw the face and background boxes on the
+    2000 px render and look. Grid tick labels sit at the line, not at the image edge, and in the
+    all-photos run three face boxes landed on background. That only showed later as a 0 % gain.
+  - **A face box under about 20 px wide on the 2000 px render** is too small for a reliable mean: no
+    mask, report it (this is the 1.5 % rule below). Measure small faces on a 2000 px crop, never on a
+    600 px contact sheet.
   - **A redo uses the recorded box.** In testing, two workers measured the same face as 84 and 59 with
     different boxes. The first number led to "no mask needed", and the user then asked for a lift.
 - **Background:** 2 boxes of the same size (a third when they disagree, see below) beside the subject, on surfaces of ordinary
@@ -216,6 +233,10 @@ Measure on a render with the look applied and no mask. Report each box's region.
     the main person) is not a main subject. In testing, a mother behind a stroller (face 66) would have
     decided the photo for a lift; the boy in front (127) gave no mask, and the user kept that.
   - Faces narrower than about 1.5 % of the frame width get no mask. Report them.
+- **Near-identical frames** (a burst, or a run of shots from one spot): decide once, on the frame
+  where the faces are clearest, and give every frame of the series the same decision and ladder start.
+  In the all-photos run, 11 frames from one spot split between lift and no mask, because one
+  background box on dark foliage flipped single frames across the 25 % line.
 - **Decide with the table in "When to lift".** The night 5 % is `lift.mask_if_darker_percent`; the daylight 25 % is fixed. Report the
   face and background numbers and the table row you used. Decide this from the numbers before making a
   mask, never by masking and then deleting. For example, an indoor portrait whose face was already
@@ -303,8 +324,9 @@ worker thought the chain had died, started a second one and got two masks. Befor
 again, check `masks` and the `.done` file. **Before starting `seg-chain.sh`, check that
 `segment.model.status` shows `analyzing: false`**: a chain started while the app was still analyzing
 the previous photo failed with TIMEOUT after 240 s, and the failure shows only in the `.done` file.
-Timings seen: `seg-wait.sh` 55–240 s (pass `--max 300`; the default
-240 can time out on a slow load), one added prompt up to about 4 min, a 3-person chain about 8 min.
+Timings seen: `seg-wait.sh` 55–240 s, and longer on the first load of a new photo (the default wait
+is 600 s; in the all-photos run a 240 s wait timed out twice), one added prompt up to about 4 min, a
+3-person chain about 8 min.
 `seg-chain.sh` runs `seg-wait.sh` itself, so skip step 1 below when you use the chain.
 
 **Reading values:** `get_develop` returns about 376 KB once a prompt mask exists, too big for the tool

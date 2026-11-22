@@ -3,14 +3,13 @@
 #
 # Usage (from Bash, after lc-env.sh; run it with the Bash tool's run_in_background, since a load can
 # take longer than one tool call allows):
-#   bash "$LC_SCRIPTS/seg-wait.sh" 501            # prints "ready after Ns" or "TIMEOUT ..."
-#   bash "$LC_SCRIPTS/seg-wait.sh" 501 --max 300   # loads of up to 240 s were seen
+#   bash "$LC_SCRIPTS/seg-wait.sh" 501            # prints "ready after Ns" or "TIMEOUT ..." (default wait 600 s)
 #
 # Runs `library.select ids=[ID] segment.prepare`, then polls `segment.model.status` every 3 s until
 # loaded is true and busy and analyzing are false. The first load took 55-135 s in testing. Exit 0 when
-# ready, 2 on timeout (default 240 s), 1 when SAM 3 isn't installed (use Path B).
-ID="${1:?usage: seg-wait.sh ID [--max 240]}"; shift
-MAX=240
+# ready, 2 on timeout (default 600 s), 1 when SAM 3 isn't installed (use Path B).
+ID="${1:?usage: seg-wait.sh ID [--max 600]}"; shift
+MAX=600
 [ "${1:-}" = "--max" ] && MAX="${2:?--max needs seconds}"
 source "$(dirname "${BASH_SOURCE[0]}")/lc-env.sh" >/dev/null 2>&1
 set -u
