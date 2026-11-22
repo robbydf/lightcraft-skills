@@ -47,6 +47,7 @@ The first rule that fits wins:
 | Scene | Face (look, no mask) | Decision |
 |-------|----------------------|----------|
 | any | shadow across it (see "Shadow across the face") | lift, shadow fix |
+| daylight | **near blown**: 190 or more, or the face box already over 0.5 % blown (`M clip`) | no mask |
 | daylight | **160 or more** | lift, bright-face ladder |
 | daylight | 60–160, **more than 25 % above** the background mean | no mask |
 | daylight | 60–160, otherwise | lift, bright-face ladder |
@@ -67,6 +68,9 @@ The first rule that fits wins:
 - **Why every daylight face under 60 is lifted:** a backlit face under a large sky (#833, face 57) read
   88 % of a background of dark trees, because sky can't be a background box; the user kept the lift.
   The bamboo-grove faces of 43–76 were all lifted and kept too.
+- **Why near-blown faces get no mask:** a sunlit face of 208 was already 0.8 % blown with no mask.
+  At 0.10 it went to 3.4 % blown and at 0.20 to 6.9 %, past the ladder's 2 % gate on the first step.
+  Check `M clip` on the face box before making a mask, so you never mask and then delete.
 - **Scene light when it is unclear:** a covered arcade or shopping street with lit signs and no sky
   in view counts as night. An outdoor street after sunset counts as night even when shop light falls
   on the face.
@@ -215,6 +219,9 @@ Measure on a render with the look applied and no mask. Report each box's region.
     so. Then mask only if the face reads under 50.
   - **Sunlit scene where every ordinary surface reads above 130** (sunlit gravel or stone): use the 2
     ordinary surfaces closest to the range and say so.
+  - **Daylight in deep shade where every ordinary surface reads under 50** (dark foliage, shaded
+    rock): use the 2 brightest ordinary surfaces, say so, and decide with the daylight rows as usual.
+    The night rule's "mask only under 50" doesn't apply in daylight.
   - Compare the face with the mean of the 2 boxes. **If one box reads more than 1.5 times the other**,
     add a third box (the next-nearest ordinary surface) and use the median of the three. In testing,
     dark foliage (69) beside light wood (119) decided a face's row on its own.
@@ -225,6 +232,15 @@ Measure on a render with the look applied and no mask. Report each box's region.
   named, else the day's people list by clothing). Don't
   measure or mask strangers, crowds, staff or performers. Report "no own people in frame: scene" and
   move on.
+  - **A "suggested:" name in the people list can be wrong.** In the all-photos run, two photos
+    listed as showing a family member held only strangers (a crowd at a gate, a girl with a deer). Go
+    by what's in the frame.
+- **Faces turned away or hidden:** when only the back of a head shows, or the face is fully hidden,
+  that person has no face to measure. If no other main face is visible, no mask. When a hand or a
+  cheek is visible, measure that skin instead and lift as usual: a hand over a face read 117 → 136
+  at 0.40, and the user's review decides.
+- **Measure with `M` only** (measure.py `mean`, `clip`, `batch`), never with a mean of your own: a
+  plain PIL mean of the same box gave a different number, which can move a face across a row.
 - **Several people:** decide on the **darkest main-subject face**, and one mask covers all of them.
   Run the cheek-to-cheek shadow test on **every** main-subject face: one shadowed face triggers the
   shadow fix for the shared mask (in hard sun, only one of three faces read under 0.5).
