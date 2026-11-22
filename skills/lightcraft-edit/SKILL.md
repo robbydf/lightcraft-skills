@@ -130,7 +130,8 @@ Edit only the photos the user names, or a scene type they approved for a batch. 
    prints the `cursor`, which is `null` if it was never edited. Record it **before every step you may
    take back** (a straightening, a mask), not only before the first: in testing, a worker ran
    `crop.autoStraighten` on six photos in one loop before reading their cursors.
-2. Note its masks: `get_develop {id}` → `masks`.
+2. Note its masks: `"$CLI" run --connect develop.get id=ID | python -I "$LC_SCRIPTS/lcjson.py" masks`
+   (`get_develop` is too big for the tool output once a prompt mask exists).
 3. Append `{"id":ID,"cursor":<cursor>,"masksBefore":<count>}` to `$RUN/edits.jsonl` with the helper,
    which always writes valid JSON:
    `python -I "$LC_SCRIPTS/editlog.py" "$RUN" start ID <cursor|null> <count> <round>`.
@@ -205,7 +206,9 @@ same name can be read back stale.
 3. **Look**, by scene type (see Looks). A photo whose scene type has no approved look gets **nothing**
    (no look and no mask) until the user approves the sample, unless the user asked for a trial batch
    (see Looks).
-4. **Subject lift**, only if measured darker (see Subject lift). Then any **local fixes** (see Local
+4. **Subject lift** for the user's own people and pets: run `lightcraft-face-lift` (see Subject
+   lift); its "When to lift" table decides, and it lifts some faces that aren't darker than the
+   background (bright daylight faces, a shadow across a face). Then any **local fixes** (see Local
    masks: signs, food, details).
 5. **AI Denoise**, if ISO `denoise.iso_candidate` (default 3200) or above and grain shows at 100 % (see AI Denoise).
 6. **Clipping check** (see Clipping check).
@@ -327,209 +330,21 @@ than the background (Subject lift).
 
 ## Subject lift (people, pets)
 
-**Target:**
-- **Face already reads 60 or more** (look applied, no mask): lift it by `lift.bright_face` (default **+15–25 %**).
-  - **In daylight this applies even when the face matches the background.** The 5 % gate below is for
-    darker faces only. A face that reads the same as the background still looks dull in daylight. Skip
-    the lift only when the face is clearly brighter, more than 5 % above the background mean.
-    - In testing, two daylight portraits had faces at the background mean and got no mask. On review,
-      the user asked for both: "face needs to be brightened up a bit".
-  - Start at `lift.mask.bright_face` (default `{"exposure":0.20,"shadows":15,"temp":0}`), not at the
-    daylight value. On the same portraits, 0.45 gave +38 %, 0.25 gave +24 %, 0.15 gave +17 %, and
-    0.20 gave +20 %. The user approved 0.20.
-  - Step the mask exposure by 0.05 to land inside the target.
-  - Only the user's own people get a lift. Strangers in a crowd or street scene are part of the scene,
-    so no mask (see lightcraft-cull, "Whose faces count").
-- **Darker faces at night:** lift until the face reaches `lift.dark_face`
-  (default **at least 75–80 % of the background mean**), with no % ceiling.
-  - In testing, the user asked for more lift on night faces in three review rounds. Faces at about
-    55 % of the background were still too dark, and 70–77 % was accepted.
-  - Faces that are near-silhouettes (under 20) may need the mask at its limit. Report what you reached.
-- **Darker faces in daylight** (under 60 with the look applied): aim for `lift.daylight_dark_face`
-  (default **about 75–85 % of the background mean, never above it**), but **the mask cap wins**: stop
-  at `lift.daylight_mask_max` even when the face is still short, and report the ratio. Use the
-  daylight ladder below, not the night one.
-  - In testing (overcast bamboo grove, dark hair against dark foliage), shadows 40 plus exposure up to
-    1.05 brought faces to 85–94 with a visible halo, and the user said the lift was too much. The
-    standard 0.45 / shadows 15 (0.65 on the darkest face) gave faces of 43–76, 52–95 % of the
-    background, and the user accepted all five.
-- At night the goal is a face at least as bright as the background. Report the face/background ratio.
-
-**Measure** on a render with the look applied and no mask. Report each box's region.
-- **Face:** a box on the skin of the forehead and cheeks: from just under the eyebrows to just
-  above the mouth, and between the outer corners of the eyes. Leave out hair, eyes, eyebrows,
-  shadowed eye sockets, glasses and specular highlights. Read the box off an `M grid` of the face,
-  never a guess from the 1000 px view.
-  - **Record the box** (x0,x1,y0,y1) in `report.md` and in the photo's `review.jsonl` `changes`.
-  - **A redo uses the recorded box.** In testing, two workers measured the same face as 84 and 59 with
-    different boxes. The first number led to "no mask needed", and the user then asked for a lift.
-- **Background:** exactly 2 boxes of the same size beside the subject, on surfaces of ordinary
-  brightness (foliage, ground, walls of a normal colour).
-  - Never use white stone, snow, white walls, signs, lamps, lit windows or sky.
-  - Each box must read 50–130 on the no-mask render; move it if not. On one portrait the boxes sat on
-    white granite (130–144) and made the face look far darker than it was.
-  - **No surface reads 50–130** (a dark night scene): use the 2 brightest ordinary surfaces and say
-    so. Then mask only if the face reads under 50.
-  - **Sunlit scene where every ordinary surface reads above 130** (sunlit gravel or stone): use the 2
-    ordinary surfaces closest to the range and say so.
-  - Compare the face with the mean of the 2 boxes.
-- **Strangers get no mask (speed and intent).** Only the user's own people are subjects (see
-  lightcraft-cull, "Whose faces count": recognised names when face recognition is on and faces are
-  named, else the day's people list by clothing). Don't
-  measure or mask strangers, crowds, staff or performers. Report "no own people in frame: scene" and
-  move on.
-- **Several people:** decide on the **darkest main-subject face**, and one mask covers all of them.
-  Faces narrower than about 1.5 % of the frame width get no mask. Report them.
-- **Mask only if the face is more than `lift.mask_if_darker_percent` (default 5 %) darker than the
-  background mean**. The exception is a daylight face of 60 or more, which follows the bright-face rule
-  in Target above.
-  Within 5 %, or brighter, no mask; report both numbers. Decide this from the numbers before making a
-  mask, never by masking and then deleting. For example, an indoor portrait whose face was already
-  brighter got no mask.
-
-**First, check for SAM 3** (once per batch): `"$CLI" run --connect segment.model.status`.
-- `available: true` and `installed: true` → use **Path A (SAM 3)**.
-- Otherwise, or if Path A fails its coverage check twice on a photo → use **Path B (Auto Mask brush)**.
-  Never start the model download yourself (`segment.model.download` needs the user's licence
-  acceptance); the user installs it.
-
-**Mask values** (both paths): `mask.adjust id=N 'values={...}'`
-- **Daylight:** `lift.mask.daylight` (default `{"exposure":0.45,"shadows":15,"temp":0}`). In testing,
-  a warmth of +3 made subjects look too warm.
-- **Night:** `lift.mask.night` (default `{"exposure":0.30,"shadows":15,"temp":0}`). This is the start
-  value. Night scenes are already tungsten-warm, so start low and step up to the target.
-- **Skin still reads warm** with temp 0: set mask `temp` to `lift.warm_skin_temp` (default -4). The
-  change is subtle: face R−B drops by only about 1 point.
-- **Black or navy clothing** turns grey under the mask (it rises more than 50 %): set mask `shadows`
-  to 5.
-- **Adjusting the lift on a dark face in daylight:** keep mask `shadows` at 15 (5 on black
-  clothing). Step only the mask exposure, by 0.1, from 0.45 up to `lift.daylight_mask_max` (default
-  0.65). Stop at the daylight target above, or at that cap, and report a face that is still short.
-  Never use the shadows ladder in daylight: lifted shadows turn dark hair grey against dark foliage,
-  which reads as a halo.
-- **Adjusting the lift on a dark face at night** (night or dim indoor scenes only): **shadows first.**
-  - Raise mask `shadows` from 15 in steps of about 8, up to `lift.shadows_max` (default 40), at the
-    current exposure.
-  - Only when shadows reach that maximum and the face is still short of the target, step the mask
-    exposure up by 0.1.
-  - Stop shadows early if one face overshoots: on one photo, 40 gave +25 % where "a bit more" was
-    asked, so 28 was kept.
-  - In testing, shadows 32–40 alone lifted faces 10–15 % on three night portraits. On the darkest
-    faces, shadows 40 plus more exposure lifted them 60–95 %. The user approved all of them.
-  - On a bright face (60 or more), step the mask exposure by 0.1 instead.
-  - The hard limit is `lift.mask_limit` (default **1.6**); never 2 or above.
-  - At each step, check at 100 % for halos at the mask edge and for noise or blotches on the face.
-    Stop at the last clean step and report which limit stopped you.
-  - In testing, 0.7 brought one face from 64 to 70.5 (77 % of the background) with a clean edge, and
-    0.85 showed no halos on two others.
-- **Face far darker than the background at the limit:** add the global `exposure.boost` (see
-  Global exposure boosts in Looks) and report the gap.
-- **Flat, veiled face:** the trigger is an overcast scene where the face looks grey and low-contrast
-  at 100 % after the lift. Set mask `shadows` to 0 and add `"dehaze":10,"clarity":10` (both are
-  valid mask settings) instead of more exposure. The mask's shadow lift causes the veil, and clarity plus contrast alone
-  did not fix it on an overcast forest portrait.
-  - It worked on a bamboo-grove portrait (mask exposure 0.35, face +17.5 %).
-  - **Not when the mask exposure is already 0.65 or more:** without the shadow lift the face got
-    darker, and the user preferred the old version (lift +12.5 % → +9.5 %). There, keep the shadows
-    and report the veil.
-- **No mask path works** (SAM 3 fails twice, the brush spills, `kind=subject` takes the whole
-  foreground): delete every attempt, keep no mask, and report the face and background means. The user
-  accepted this on a small figure in front of a dark panel, where every method failed.
-
-### Picking points (both paths)
-
-Export `library.select 'ids=[ID]' app.export path="$SP/ID.jpg" longEdge=1500`, then run
-`M grid "$SP/ID.jpg" -Region <around subject> -Out "$SP/ID-grid.png"`. Read the PNG and take the
-coordinates from it: fractions of the full frame, as the grid labels show.
-- **Read x and y from the tick labels, not by eye from the cell count:** `-Region` is `x0,x1,y0,y1`,
-  and the grid labels are full-frame fractions. In testing, first readings of 3 face boxes were off.
-  Check a face box with `M mean` before using its numbers.
-
-### Path A: SAM 3 mask
-
-1. Load the model for the photo and wait until it is ready, in one call with a tool timeout of
-   about 300 s: `bash "$LC_SCRIPTS/seg-wait.sh" ID` (runs `segment.prepare`, then polls
-   `segment.model.status` until `loaded: true`, `busy: false` and `analyzing: false`; prints
-   `ready after Ns`). A cold load took 55–135 s in testing. Don't hand-poll: each poll costs a turn.
-   Check that the new mask component has its `seg` data before the coverage check.
-2. Make the mask (the result's `activeMask` is N; if it says `pending`, repeat `get_develop {id}` until
-   the mask appears in `masks`):
-   - **Preferred: describe each main person** (tested). Use 2–4 words: who they are plus their
-     clothing colour, such as "man in red shirt", "girl in blue jacket" or "woman in black top". Make the first person's mask with
-     `library.select 'ids=[ID]' mask.add kind=prompt 'text=man in red shirt' name=Subject`, then add each
-     other person **to the same mask** with
-     `library.select 'ids=[ID]' mask.addComponent id=N op=add kind=prompt 'text=girl in blue jacket'`.
-     Both calls return `pending`. Poll `get_develop {id}` until the new component has its `seg` data.
-     **For two or more people use the helper**, as a background tool call, then short polls:
-     ```bash
-     bash "$LC_SCRIPTS/seg-chain.sh" "$SP" ID Subject "man with glasses" "boy in dark jacket"
-     timeout 170 bash -c 'until [ -f "$0/seg-ID.done" ]; do sleep 5; done' "$SP"; cat "$SP/seg-ID.done"   # repeat until MASK=N …
-     ```
-     It loads SAM 3, adds each prompt to one mask and waits for each part's `seg` data. Then do the
-     coverage check.
-     - **A prompt that finds nothing stays `pending` for ever, with no error** (tested: "lamp post",
-       "wall clock" on a frame with neither). A part with no `seg` data after about 5 min was not
-       found: use a more specific prompt, or clicked points.
-     - Allow 20–40 s for the first prompt, and up to about 4 min for each added one: the app also
-       re-processes the earlier parts.
-     - Never use a sentence-long prompt: one found nothing in 4½ min.
-     - A generic prompt such as "man and woman" also takes every passer-by who matches. That's why each
-       prompt names clothing.
-     - Exclude points (`mask.objectPoint`) **don't work** on a prompt mask ("the mask has no Object
-       selection"). Fix spill by deleting the mask and using a more specific prompt or clicked points.
-   - **Small faces in a crowd** (a portrait in front of a busy night scene, other people in similar
-     clothes nearby): go straight to clicked points. In testing, "woman in white top" also took a
-     girl in pink behind her, and clicked points were faster and cleaner on 4 portraits.
-   - **Fallback: clicked points** read from a grid (see "Picking points"). Use it when a prompt finds
-     nothing, catches the wrong people, or fails the coverage check twice:
-     `mask.add kind=object 'points=[[x,y],[x,y]]' 'exclude=[[x,y]]' name=Subject`.
-     Add or remove parts later with `mask.objectPoint id=N x=… y=…` (`exclude=true` to remove).
-   - One obvious person or animal: `library.select 'ids=[ID]' mask.add kind=subject name=Subject`.
-   - Optional, for hair and fine edges: `mask.refineDetail id=N`. It runs in the background, so poll
-     `segment.model.status` until `busy: false`.
-3. **Coverage check:** first poll `get_develop {id}` until the mask's component has its `seg` data:
-   `mask.add` can still be pending while the app is analyzing, and an adjust made before the data
-   exists is lost (tested). Then set `mask.adjust id=N 'values={"exposure":3}'`, export and read it.
-   The subject should be blown out and the background unchanged.
-   - Where +3 is hard to read (it often only brightens the subject a little), use a colour overlay instead:
-     `mask.adjust id=N 'values={"tint":100,"saturation":100,"exposure":1}'`. Everything masked turns
-     magenta, or red-orange on warm tungsten frames (tested on a 2641 K carrousel frame): judge the
-     coloured area's edge against the unmasked part, not the hue. Set the real values afterwards, the
-     same as after +3.
-   - Fix spill with `mask.objectPoint … exclude=true` (clicked-point masks only).
-   - **Never leave the +3 value.**
-   - If the mask is still wrong after two fixes, run `mask.delete id=N` and use Path B.
-4. Set the mask values above, then measure.
-5. In the report, say which path made the mask.
-6. After an aborted step, check `masks` for a stray mask and delete it.
-
-### Path B: Auto Mask brush (no SAM 3)
-
-1. Get coordinates as in "Picking points".
-2. Run `library.select 'ids=[ID]' mask.add kind=brush name=Subject`; the result's `activeMask` is N.
-   Then add strokes with `mask.brushStroke id=N 'points=[[x,y],…]' size=0.02 autoMask=true`.
-   - `size` is a fraction of the long edge, 0.02–0.03.
-   - Cover the head, torso, arms and legs, keeping each stroke inside the subject.
-3. **Coverage check:** as in Path A step 3. Erase spill with
-   `mask.brushStroke id=N … erase=true autoMask=true size=0.01`. If you abandon the mask, run
-   `mask.delete id=N`.
-4. Set the mask values above, then measure.
-   - Before/after: export with `"amount":0`, then set `"amount":100` again and export. **Always end
-     at amount 100.**
-   - Check the edges with `M crops` at 100 %.
-
-**Edge crops (both paths):** centre each 100 % crop on the mask boundary against a mid or bright
-background, with at least 30 % of the crop being background. Crops placed inside the subject showed no
-halo in testing even when there was one.
-- **Check at true 100 %, not on a 2000 px render,** for the strongest mask in each batch and for any
-  mask with exposure above 0.6: export that photo at `longEdge=6000` (4000 while GPU rendering is on, see Setup; one per call), and centre the
-  crop where dark hair meets a dark background (foliage, shade). That edge is where halos show first.
-  In testing, 2000 px edge crops passed five portraits whose halo the user saw on the review page.
+The lift has its own skill, **`lightcraft-face-lift`**. It covers whether a face needs a lift and
+how to measure it, a shadow across a face, the SAM 3 and Auto Mask paths, the mask values and
+ladders, and the edge checks.
+- **Main session:** invoke it with the Skill tool (`lightcraft:lightcraft-face-lift` when installed
+  as a plugin, else `lightcraft-face-lift`).
+- **Batch worker, or no Skill tool:** Read `<base>/../lightcraft-face-lift/SKILL.md`, where `<base>`
+  is this skill's base directory. Name that file in every worker brief.
+- The setup, history record and look from this skill carry over. Afterwards come back here for local
+  fixes, denoise, the clipping check and the after render.
 
 ## Local masks: signs, food, details
 
 These came from user requests in testing. Do them only when the user asks, or when the condition below is
-clearly met. Make the mask as in Path A, check coverage with the magenta overlay, then set the values.
+clearly met. Make the mask as in Path A of `lightcraft-face-lift`, check coverage with the magenta
+overlay, then set the values.
 
 - **A bright sign or billboard competing with the people:** darken the sign a little **and** lift the
   people a little.
@@ -844,6 +659,7 @@ Subagents aren't told the skill's base directory, so list in the brief:
   the worker makes no face calls of its own;
 - that the report ends with **"Improvements"**: at most 6 lines on what would make the skill faster,
   use fewer tokens, or give better results. The orchestrator collects them for the next skill update;
+- the path of `lightcraft-face-lift/SKILL.md` (the lift step; workers Read it, see Subject lift);
 - the review material and `review.jsonl` (see Showing results);
 - the report: at most 15–25 lines, with no images;
 - that the worker never uses `edit.undo`/`edit.redo` (global, not per photo; take steps back with
@@ -886,6 +702,9 @@ chunk must stop:
     daylight look.
   - A mask on a photo with `look.night` or `look.light_show` follows the night ladder: shadows up to
     `lift.shadows_max`, and exposure up to `lift.mask_limit`. Don't flag it as over the daylight cap.
+  - The face lift picks its ladder by the **scene**, not the look. A photo whose report notes "look is
+    X, scene is Y" is checked by hand against the scene's ladder (see lightcraft-face-lift, Mask
+    values); a looks.py FAIL or pass on it doesn't count.
   - **Take the ids from the list you gave the worker,** written to a file when you launch it. In
     testing, a check read an older chunk file after the day was re-split and scanned the wrong ids.
   - Workers run the same check on their own ids before they report.
@@ -1011,5 +830,6 @@ Never claim a photo is brighter, cleaner or straight without a measurement.
 - **Re-exports under the same file name can be read back stale.** Use a new name for every working
   render.
 - **`mask.add` and `mask.addComponent` can stay `pending` for minutes,** and a single CLI call can run
-  past 180 s. Poll `get_develop` until the component has its `seg` data. Never TaskStop a running mask
+  past 180 s. Poll `"$CLI" run --connect develop.get id=ID | python -I "$LC_SCRIPTS/lcjson.py" seg NAME` until
+  READY equals PARTS (`kind=subject` masks never get `seg` data; see lightcraft-face-lift). Never TaskStop a running mask
   command: one stopped call later reset a mask to +3.

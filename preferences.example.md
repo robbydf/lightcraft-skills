@@ -65,14 +65,16 @@ for `mask.adjust`.
 
 ## Edit: subject lift (people, pets)
 
-- `lift.mask_if_darker_percent`: 5 (mask only if the face is this much darker than the background)
-- `lift.bright_face`: +15–25 % (face already 60 or more)
+- `lift.mask_if_darker_percent`: 5 (night only: mask only if the face is this much darker than the background; daylight uses a fixed 25 % margin, see lightcraft-face-lift)
+- `lift.bright_face`: +15–25 % (daylight face already 60 or more; the mask stops at 0.50)
 - `lift.dark_face`: at least 75–80 % of the background mean (night)
 - `lift.daylight_dark_face`: about 75–85 % of the background mean, never above it; the mask cap below wins
 - `lift.daylight_mask_max`: 0.65 (daylight: keep mask shadows 15 and step exposure only, up to this)
 - `lift.mask.daylight`: `{"exposure":0.45,"shadows":15,"temp":0}`, approved: false
 - `lift.mask.bright_face`: `{"exposure":0.20,"shadows":15,"temp":0}` (start value for a face of 60 or more), approved: false
 - `lift.mask.night`: `{"exposure":0.30,"shadows":15,"temp":0}` (start value), approved: false
+- `lift.mask.face_shadow`: `{"exposure":0.45,"shadows":15,"temp":0}` (a shadow across the face: shadow skin under half of the lit skin), approved: false
+- `lift.face_shadow_global`: 0.25 (global exposure added with that mask; counts as the photo's `exposure.boost`)
 - `lift.warm_skin_temp`: -4
 - `lift.mask_limit`: 1.6 (never 2 or above)
 - `lift.shadows_max`: 40 (night only: dark faces get mask shadows raised to this first, then exposure)

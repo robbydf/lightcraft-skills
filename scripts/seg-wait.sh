@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Prepare SAM 3 for one photo and wait until it is ready (Path A of the edit skill).
 #
-# Usage (from Bash, after lc-env.sh; one foreground call with a tool timeout of about 300 s):
+# Usage (from Bash, after lc-env.sh; run it with the Bash tool's run_in_background, since a load can
+# take longer than one tool call allows):
 #   bash "$LC_SCRIPTS/seg-wait.sh" 501            # prints "ready after Ns" or "TIMEOUT ..."
-#   bash "$LC_SCRIPTS/seg-wait.sh" 501 --max 200
+#   bash "$LC_SCRIPTS/seg-wait.sh" 501 --max 300   # loads of up to 240 s were seen
 #
 # Runs `library.select ids=[ID] segment.prepare`, then polls `segment.model.status` every 3 s until
 # loaded is true and busy and analyzing are false. The first load took 55-135 s in testing. Exit 0 when

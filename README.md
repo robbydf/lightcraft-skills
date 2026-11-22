@@ -8,7 +8,8 @@ renders, and asks you before anything that depends on your taste.
 |---|---|
 | `lightcraft-mcp` | `start`: launch LightCraft with its control port, check the CLI and MCP bridge, and register the `lightcraft` MCP server with Claude Code. `stop`: disconnect and close LightCraft gracefully. |
 | `lightcraft-cull` | Cull a day or a whole library. The best frame of each burst and usable singles get picked, clear failures get the reject flag, and everything else stays unmarked. Big libraries run chunk by chunk in subagents, with an optional 3-reviewer panel for borderline frames. Every mark is logged and can be rolled back. |
-| `lightcraft-edit` | Edit only the photos you name: approved looks per scene type, measured subject lifts with SAM 3 or Auto Mask, local masks (signs, food, details), opt-in bystander removal, AI Denoise, and straightening. The output is a review page plus phone-sized before/after images. |
+| `lightcraft-edit` | Edit only the photos you name: approved looks per scene type, measured subject lifts (through `lightcraft-face-lift`), local masks (signs, food, details), opt-in bystander removal, AI Denoise, and straightening. The output is a review page plus phone-sized before/after images. |
+| `lightcraft-face-lift` | Lift the faces of your own people and pets with a SAM 3 or Auto Mask mask, measured against the background, and lessen a shadow across a face. `lightcraft-edit` calls it for its subject-lift step; you can also use it on its own ("brighten his face"). |
 | `lightcraft-export` | `/lightcraft-export [target] [trip]` (default target `google-photos`): export a trip's picks that show your own people (from LightCraft's face naming) at the target's settings into a folder the platform picks up. For Google Photos this is 16 MP sRGB JPEG with the date and GPS kept, into a folder Google Drive for desktop backs up. It is read-only on the catalog, never overwrites, and a manifest makes reruns skip what was already exported. |
 
 ## Install
@@ -81,6 +82,7 @@ no-op on 0.21.1. It's kept for a future LightCraft that needs auth. Never commit
 skills/lightcraft-mcp/SKILL.md
 skills/lightcraft-cull/SKILL.md   plus panel-brief.md (the borderline panel's reviewer brief)
 skills/lightcraft-edit/SKILL.md
+skills/lightcraft-face-lift/SKILL.md (the subject lift, called by lightcraft-edit)
 skills/lightcraft-export/SKILL.md plus targets/<target>.md (one per platform: google-photos.md)
 scripts/
   lc-env.sh             sourced by every Bash call: sets CLI, LC_SCRIPTS, LC_PY, RUNS, PREFS, M, LCX
