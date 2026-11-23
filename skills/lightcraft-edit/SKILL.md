@@ -304,6 +304,9 @@ night. (Mask `temp` values are a relative shift, not Kelvin.)
 than the background (Subject lift).
 - At most `exposure.boost` (default +0.25) in total per photo, whatever the scene type. If one boost was already added, add no
   other.
+- **Blown gate for every boost** (the same as the face-shadow fix): keep it only if the whole frame's
+  blown % rises by less than 0.5 points and no face box goes over 2 % blown. Otherwise take it off
+  and say so. In the all-photos run the boost came off again on 5 sunlit plaza frames for this.
 - **When the user asks for more exposure, that overrides the cap.** Step `exposure.on_request_step`
   at a time and report the blown %.
 - **"Lift the highlights" (or "brighter") on a dark light-show subject** means brighter lights, not
@@ -430,8 +433,19 @@ It takes no parameters and acts on the selected photo. It needs the GUI (`--conn
   LightCraft edit first, then hand off.
 - **Edits made in PhotoCraft** belong to PhotoCraft's own tools or skill. This skill only does the
   hand-off. Leave the PhotoCraft window to the user, or to a PhotoCraft skill if one is installed.
-- **Not checked yet:** what LightCraft shows for the copy after PhotoCraft saves it, and what a
-  second hand-off of the same photo does (a new `-Edit-2.psd`, or overwriting the first).
+- **After PhotoCraft saves the PSD,** run `photo.reload ids=[COPY] wait=true` on the copy (under 0.5 s).
+  LightCraft then shows the saved pixels: a red box painted in PhotoCraft showed up in the next export,
+  and putting the old file back (with an older timestamp) and reloading brought back the original
+  exactly. The reload doesn't change the copy's develop settings. PhotoCraft saves 16-bit
+  RLE-compressed, so the file about doubles (144 → 287 MB).
+- **A second hand-off of the same photo fails** (tested twice, with and without a PhotoCraft
+  running): the CLI prints `"error":"invalid parameters for \`photo.editExternal\`: the edit copy could
+  not be added"` and `1 command(s) failed`, after about 25 s. It still writes `<name>-Edit-2.psd`,
+  byte-identical to the first copy, but adds no library photo and doesn't open PhotoCraft. Most
+  likely LightCraft refuses a duplicate of a file it already has. So hand a photo off once and
+  reopen the existing copy in PhotoCraft instead. After a failure, tell the user about the stray
+  `-Edit-2.psd` (don't delete it unasked), and keep the whole CLI output: never rerun the hand-off
+  just to read the error.
 
 `photo.openOriginalInExternal` ("Open Original in Other Editor (RAW, no copy)") is the other entry in
 Photo › Edit In. It hands over the raw file itself: no copy, and none of the LightCraft edits.
@@ -857,6 +871,8 @@ Never claim a photo is brighter, cleaner or straight without a measurement.
 - **Full-size exports** (`longEdge=6000`; at most 4000 while GPU rendering is on, see Setup) take 25–30 s each. Export 1–2 per call: a call of 8 timed
   out. The export then kept running in the background, and for about a minute every request failed
   with "drew no frame". Wait for `library.state` to answer `"ok":true` before the next call.
+- **One export call at a time**, never two in parallel (also not for the "before" renders): each
+  call selects its photos, and LightCraft has one selection.
 - Mask commands take the mask's `id` (from `activeMask` or `masks[].id`, starting at 1), not its
   position in the `masks` list: `id=0` fails with "no mask 0".
 - The linear gradient `mask.add kind=linear 'start=[0.5,1.0]' 'end=[0.5,0.55]'` works (tested): full at the bottom edge, gone by y 0.55.

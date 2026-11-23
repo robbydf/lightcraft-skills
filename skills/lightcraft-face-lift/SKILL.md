@@ -33,7 +33,20 @@ This is the subject-lift step of `lightcraft-edit`, kept as its own skill.
   - **The table now says "no mask" but a lift mask exists:** keep it. If it's above the ladder's cap
     (0.50 for the bright ladder), lower it to the cap. Otherwise leave its values as they are. Ask about
     it on the review card ("old lift kept although the face is X % above the background: keep?").
+  - **The old mask already puts the face above the target but still under the background** (a dark
+    daylight face at 88–94 % against the 75–85 % aim): keep it. The ladder doesn't step down. Lower a
+    mask only when the face reads above the background (on the dark-face target) or the mask is over
+    its ladder's cap, and then only to the highest step that fits.
+  - **Judge an old mask's coverage by the gain on each face box** (the same box measured on the render
+    with `amount` 0 and with 100): a covered face gains, an uncovered one stays at about 0 %. The
+    colour overlay is hard to read on dark faces.
   - A mask you step or extend gets `temp 0`. Leave the temp of a mask you keep untouched.
+- **A photo the user edited by hand, with no look** (their own exposure, highlights, denoise or hand
+  mask; in a batch run): leave it untouched and report it. A look would overwrite their values, and a
+  second noise reduction would stack on theirs.
+- **Order in a batch:** the look first, then the global `exposure.boost` decision (lightcraft-edit,
+  Global exposure boosts), and only then the no-mask render and the ladder. The boost changes every
+  face number, so deciding it after the ladder means redoing both (one chunk redid 10 photos).
 - Names in `backticks` such as `lift.mask.daylight` are keys in the preferences file (`$PREFS`).
   `M`, `LCX`, `$CLI` and the helpers are described in lightcraft-edit's Setup.
 - Every CLI call starts with `library.select 'ids=[ID]'`. Never use `edit.undo` or `edit.redo`; take
@@ -71,6 +84,9 @@ The first rule that fits wins:
 - **Why near-blown faces get no mask:** a sunlit face of 208 was already 0.8 % blown with no mask.
   At 0.10 it went to 3.4 % blown and at 0.20 to 6.9 %, past the ladder's 2 % gate on the first step.
   Check `M clip` on the face box before making a mask, so you never mask and then delete.
+- **The night 5 % gate in a scene full of signs and lights** (Dotonbori, Glico, a lit canal) flips
+  with the background box. Compare the face with the plain surface right beside the person (ground or
+  wall, see Measure), and in a series let the majority of frames decide.
 - **Scene light when it is unclear:** a covered arcade or shopping street with lit signs and no sky
   in view counts as night. An outdoor street after sunset counts as night even when shop light falls
   on the face.
@@ -87,7 +103,10 @@ The first rule that fits wins:
   - Step the mask exposure by **0.10**, then by 0.05 for the last step into the target. Gain per step
     varies: on a two-person frame at about 105, 0.20 gave +9 %, 0.35 +14 %, 0.40 +16 %.
   - **The bright-face ladder stops at 0.50**, even below the target, and earlier if a face box would
-    show more than 2 % blown. Never go past 0.50 to chase the %. On a face of 150 or more, flag the
+    show more than 2 % blown. Measure that on skin, not on glasses glints (see Measure). If a skin box
+    is already near or over 2 % before the mask, keep the mask at the start step, even when another,
+    darker face on the same mask stays short. Flag the card ("lift held at X: one face already near
+    blown, the other still at Y % of the background"). Never go past 0.50 to chase the %. On a face of 150 or more, flag the
     review card ("bright face, lift stopped at 0.50: OK?"). In testing, an overcast close-up at 165 got
     +8.8 % at 0.65; the user called it marginal ("might be a bit blown out") and set it to 0.50. A
     close-up at 188 got +8.9 % at 0.50, and the user kept it. Every kept bright-face lift so far sits at
@@ -99,6 +118,10 @@ The first rule that fits wins:
   - A face of 55 against a lit street (night, black sweater) got the start value 0.30 and went to 69
     (+25 %); the user asked for "a little bit" of lift and said 0.30 "looks right".
   - Faces that are near-silhouettes (under 20) may need the mask at its limit. Report what you reached.
+  - **Silhouettes often can't reach 75 %.** In the all-photos run, canal and street silhouettes (faces
+    23–35) reached only 57–72 % at shadows 40 and exposure 1.30–1.50, with little gain per step above
+    1.3. Stop new masks at **1.50**, report the ratio, and then consider the global `exposure.boost`
+    (a separate step, under its own blown gate). 1.6 stays the hard limit for masks already there.
 - **Darker faces in daylight** (under 60 with the look applied): aim
   for `lift.daylight_dark_face` (default **about 75–85 % of the background mean, never above it**), but **the mask cap wins**: stop
   at `lift.daylight_mask_max` even when the face is still short, and report the ratio. Use the
@@ -197,6 +220,15 @@ Measure on a render with the look applied and no mask. Report each box's region.
   above the mouth, and between the outer corners of the eyes. Leave out hair, eyes, eyebrows,
   shadowed eye sockets, glasses and specular highlights. Read the box off an `M grid` of the face,
   never a guess from the 1000 px view.
+  - **Faster: start from LightCraft's face rectangle** when the cull saved one
+    (`$RUN/faces-<Name>.json` from lightcraft-cull's people step; `result.confirmed[]` entries whose
+    `photo` is the id, `rect` in full-frame fractions x0,x1,y0,y1). Use **x0+0.15w to x1−0.15w and
+    y0+0.38h to y0+0.70h** as the face box, then check it on the image as below. In the all-photos run
+    this replaced the slowest step, finding faces by eye. A lower band (0.42–0.78) landed on nose and
+    mouth. A name tagged twice in one photo can leave another person without a rect: find that one by
+    eye.
+  - **Glasses:** the band lands on the lenses, and glints read as blown (1–3 % on one face). Move the
+    box onto the cheek below the lens.
   - **Record the box** (x0,x1,y0,y1) in `report.md` and in the photo's `review.jsonl` `changes`.
   - **Check each box on the image before measuring:** draw the face and background boxes on the
     2000 px render and look. Grid tick labels sit at the line, not at the image edge, and in the
@@ -217,6 +249,9 @@ Measure on a render with the look applied and no mask. Report each box's region.
     white granite (130–144) and made the face look far darker than it was.
   - **No surface reads 50–130** (a dark night scene): use the 2 brightest ordinary surfaces and say
     so. Then mask only if the face reads under 50.
+  - **Crowded night streets, a lit canal** (signs, lamps and crowds everywhere): there is no ordinary
+    surface at face height. Use the ground or a plain wall beside the person (pavement, brick) and
+    name the surfaces.
   - **Sunlit scene where every ordinary surface reads above 130** (sunlit gravel or stone): use the 2
     ordinary surfaces closest to the range and say so.
   - **Daylight in deep shade where every ordinary surface reads under 50** (dark foliage, shaded
@@ -225,6 +260,9 @@ Measure on a render with the look applied and no mask. Report each box's region.
   - Compare the face with the mean of the 2 boxes. **If one box reads more than 1.5 times the other**,
     add a third box (the next-nearest ordinary surface) and use the median of the three. In testing,
     dark foliage (69) beside light wood (119) decided a face's row on its own.
+  - **One surface under 50 and one above 130** (a dark hedge beside sunlit pavement): that is the
+    1.5 times case above, so add the third box and take the median. In a series, the
+    near-identical-frames rule then decides for all frames.
   - **One box in range and one under 50** (at night): take the in-range box plus the next-brightest
     ordinary surface, and say so.
 - **Strangers get no mask (speed and intent).** Only the user's own people are subjects (see
@@ -252,7 +290,8 @@ Measure on a render with the look applied and no mask. Report each box's region.
 - **Near-identical frames** (a burst, or a run of shots from one spot): decide once, on the frame
   where the faces are clearest, and give every frame of the series the same decision and ladder start.
   In the all-photos run, 11 frames from one spot split between lift and no mask, because one
-  background box on dark foliage flipped single frames across the 25 % line.
+  background box on dark foliage flipped single frames across the 25 % line. When the frames of a
+  series still disagree, **the majority decides**, and the clearest frame sets the ladder start.
 - **Decide with the table in "When to lift".** The night 5 % is `lift.mask_if_darker_percent`; the daylight 25 % is fixed. Report the
   face and background numbers and the table row you used. Decide this from the numbers before making a
   mask, never by masking and then deleting. For example, an indoor portrait whose face was already
@@ -285,7 +324,8 @@ Both paths: `mask.adjust id=N 'values={...}'`
   value. Night scenes are already tungsten-warm, so start low and step up to the target.
 - **Skin still reads warm** with temp 0: set mask `temp` to `lift.warm_skin_temp` (default -4). The
   change is subtle: face R−B drops by only about 1 point.
-- **Black or navy clothing** turns grey under the mask (it rises more than 50 %): set mask `shadows`
+- **Black or navy clothing** turns grey under the mask (it rises more than 50 % **and** by more than
+  about 15 points; a skirt going from 5 to 11 is +110 % but only 6 points, so ignore it): set mask `shadows`
   to 5. Measure it first; don't change it on the look of the clothes alone. The shadow fix keeps 15
   unless the clothing measures grey (two black-shirt people stayed fine at 15 in testing).
 - **Adjusting the lift on a dark face in daylight:** keep mask `shadows` at 15 (5 on black
@@ -342,7 +382,10 @@ again, check `masks` and the `.done` file. **Before starting `seg-chain.sh`, che
 the previous photo failed with TIMEOUT after 240 s, and the failure shows only in the `.done` file.
 Timings seen: `seg-wait.sh` 55–240 s, and longer on the first load of a new photo (the default wait
 is 600 s; in the all-photos run a 240 s wait timed out twice), one added prompt up to about 4 min, a
-3-person chain about 8 min.
+3-person chain about 8 min. In the all-photos run a chain took 3–9 min per photo, mostly the model
+load. **Run no other LightCraft command while a chain runs**, not even an export of another photo:
+every call starts with `library.select`, and a selection change mid-chain can put a mask step on
+the wrong photo. Run the chains of a batch back to back, and measure before or after them.
 `seg-chain.sh` runs `seg-wait.sh` itself, so skip step 1 below when you use the chain.
 
 **Reading values:** `get_develop` returns about 376 KB once a prompt mask exists, too big for the tool
@@ -383,6 +426,8 @@ output. Read with the CLI and `lcjson.py`:
        prompt names clothing.
      - Exclude points (`mask.objectPoint`) **don't work** on a prompt mask ("the mask has no Object
        selection"). Fix spill by deleting the mask and using a more specific prompt or clicked points.
+   - **Dark silhouettes at night** (face under about 20): go straight to clicked points. A prompt
+     such as "boy in gray jacket" found nothing on one and only gave up after about 7 minutes.
    - **Small faces in a crowd** (a portrait in front of a busy night scene, other people in similar
      clothes nearby): go straight to clicked points. In testing, "woman in white top" also took a
      girl in pink behind her, and clicked points were faster and cleaner on 4 portraits. At night,
@@ -417,7 +462,10 @@ output. Read with the CLI and `lcjson.py`:
      coloured area's edge against the unmasked part, not the hue. Set the real values afterwards, the
      same as after +3.
    - Fix spill with `mask.objectPoint … exclude=true` (clicked-point masks only).
-   - **Never leave the +3 value.**
+   - **Never leave the +3 value or the overlay.** The overlay sets `tint`, `saturation` and
+     `exposure` together. After the check, set the real values, export again, and confirm them with
+     `develop.get`: in the all-photos run an overlay check made after a mask was stepped stayed on two
+     photos until `looks.py check` caught it.
    - If the mask is still wrong after two fixes, run `mask.delete id=N` and use Path B.
 4. Set the mask values above, then measure.
 5. In the report, say which path made the mask.
