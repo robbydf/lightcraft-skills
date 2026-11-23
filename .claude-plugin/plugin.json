@@ -1,6 +1,6 @@
 {
   "name": "lightcraft",
-  "version": "0.1.20",
+  "version": "0.1.21",
   "description": "Cull, edit and export photos in LightCraft (ArtCraft's photo editor) from Claude Code: start the GUI with its MCP bridge, pick and reject frames, apply measured edits, and export picks to Google Photos.",
   "author": { "name": "robbydf" },
   "repository": "https://github.com/robbydf/lightcraft-skills",
