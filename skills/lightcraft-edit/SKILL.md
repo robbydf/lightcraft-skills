@@ -447,7 +447,11 @@ Tested on 531 (_RDF5035.ARW) and 329 (_RDF4833.ARW), November 2026:
 - **Edits made in PhotoCraft** belong to PhotoCraft's own tools or skill. This skill only does the
   hand-off. Leave the PhotoCraft window to the user, or to a PhotoCraft skill if one is installed:
   `photocraft-mcp` (start, round trip) and `photocraft-remove-bystander` (strangers).
-  - **When another session does the PhotoCraft work,** send it the original and copy ids, the PSD
+  - **Do the PhotoCraft step in this session** when the `mcp__photocraft__*` tools are here (both
+    MCP servers registered in user scope, see `lightcraft-mcp`): load the PhotoCraft skill and run
+    the round trip yourself. If they're missing, ask the user to run `/photocraft-mcp start` and open
+    a new session, rather than briefing another one.
+  - **When another session does the PhotoCraft work anyway,** send it the original and copy ids, the PSD
     path, the user's own words, and where the person is, in normalized coordinates read from a
     `render_photo` of the copy. "Sarah's left arm" is the viewer's right. Also tell it not to hand
     the photo off again. The PhotoCraft skill backs up the PSD and runs the `photo.reload` itself;
