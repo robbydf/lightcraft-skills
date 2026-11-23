@@ -43,6 +43,120 @@ class LcArgs(unittest.TestCase):
         self.assertEqual(out, ["a.jpg", "-Region=0,1,0,1", "-Angles=-6,-4", "-Force"])
 
 
+def load_mcp_script():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("lightcraft_mcp", os.path.join(SCRIPTS, "lightcraft-mcp.py"))
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    return m
+
+
+class FakeClaude:
+    """`claude mcp get/add/remove` over an in-memory {scope: (command, args)}."""
+
+    def __init__(self, entries):
+        self.entries = dict(entries)
+        self.calls = []
+
+    def __call__(self, args, timeout=60, **kw):
+        self.calls.append(args[1:])
+        verb = args[2]
+        if verb == "get":
+            for scope in ("local", "project", "user"):
+                if scope in self.entries:
+                    c, a = self.entries[scope]
+                    out = f"lightcraft:\n  Scope: {scope.title()} config\n  Command: {c}\n  Args: {a}\n"
+                    return subprocess.CompletedProcess(args, 0, out.encode(), b"")
+            return subprocess.CompletedProcess(args, 1, b"", b"No MCP server")
+        if verb == "add":
+            scope = args[args.index("-s") + 1]
+            rest = args[args.index("--") + 1:]
+            self.entries[scope] = (rest[0], " ".join(rest[1:]))
+            return subprocess.CompletedProcess(args, 0, b"", b"")
+        if verb == "remove":
+            scope = args[args.index("-s") + 1]
+            return subprocess.CompletedProcess(args, 0 if self.entries.pop(scope, None) else 1, b"", b"")
+        raise AssertionError(args)
+
+
+class McpRegistration(unittest.TestCase):
+    CLI = os.path.abspath("lc/lightcraft-cli.exe")
+    ADDR = "127.0.0.1:7980"
+    RIGHT = (CLI, "mcp --connect 127.0.0.1:7980")
+
+    def go(self, entries, scope="user"):
+        from types import SimpleNamespace
+        from unittest import mock
+        m = load_mcp_script()
+        fake = FakeClaude(entries)
+        with mock.patch.object(m, "run", fake), mock.patch.object(m, "say"):
+            rc = m.register(SimpleNamespace(Scope=scope), "claude", self.CLI, self.ADDR)
+        return rc, fake
+
+    def test_default_scope_is_user(self):
+        m = load_mcp_script()
+        from unittest import mock
+        with mock.patch.object(m, "find", return_value=""), mock.patch.object(m, "say"):
+            self.assertEqual(m.main(["start", "-LightCraftDir", "nowhere"]), 9)
+        with open(os.path.join(SCRIPTS, "lightcraft-mcp.py"), encoding="utf-8") as f:
+            line = [l for l in f if '"-Scope"' in l and "add_argument" in l][0]
+        self.assertIn('default="user"', line)
+
+    def test_new_user_registration(self):
+        rc, fake = self.go({})
+        self.assertEqual((rc, fake.entries), (0, {"user": self.RIGHT}))
+
+    def test_right_user_entry_is_kept(self):
+        rc, fake = self.go({"user": self.RIGHT})
+        self.assertEqual(rc, 0)
+        self.assertFalse([c for c in fake.calls if c[1] in ("add", "remove")])
+
+    def test_local_entry_moves_up_to_user(self):
+        rc, fake = self.go({"local": self.RIGHT})
+        self.assertEqual((rc, fake.entries), (0, {"user": self.RIGHT}))
+
+    def test_local_entry_over_right_user_one_is_removed(self):
+        rc, fake = self.go({"local": ("old.exe", "mcp --connect 127.0.0.1:1"), "user": self.RIGHT})
+        self.assertEqual((rc, fake.entries), (0, {"user": self.RIGHT}))
+
+    def test_stale_user_entry_is_replaced(self):
+        rc, fake = self.go({"user": (self.CLI, "mcp --connect 127.0.0.1:1")})
+        self.assertEqual((rc, fake.entries), (0, {"user": self.RIGHT}))
+
+    def test_wrong_project_entry_is_left_to_the_user(self):
+        rc, fake = self.go({"project": ("x.exe", "mcp")})
+        self.assertEqual((rc, fake.entries), (6, {"project": ("x.exe", "mcp")}))
+
+    def test_local_scope_still_works(self):
+        rc, fake = self.go({"user": ("old.exe", "mcp")}, scope="local")
+        self.assertEqual((rc, fake.entries), (0, {"user": ("old.exe", "mcp"), "local": self.RIGHT}))
+
+
+class McpStop(unittest.TestCase):
+    def go(self, disconnect):
+        from types import SimpleNamespace
+        from unittest import mock
+        m = load_mcp_script()
+        fake = FakeClaude({"user": ("cli.exe", "mcp --connect 127.0.0.1:7980")})
+        killed = []
+        with mock.patch.object(m, "run", fake), mock.patch.object(m, "say"), \
+                mock.patch.object(m, "claude_cmd", return_value="claude"), \
+                mock.patch.object(m, "bridge_pids", return_value=[11, 12]), \
+                mock.patch.object(m, "kill", killed.append), \
+                mock.patch.object(m, "gui_pids", return_value=[]):
+            rc = m.stop(SimpleNamespace(Disconnect=disconnect, Force=False, TimeoutSec=1))
+        return rc, fake, killed
+
+    def test_plain_stop_keeps_registration_and_bridges(self):
+        rc, fake, killed = self.go(False)
+        self.assertEqual((rc, killed), (0, []))
+        self.assertIn("user", fake.entries)
+
+    def test_disconnect_removes_both(self):
+        rc, fake, killed = self.go(True)
+        self.assertEqual((rc, killed, fake.entries), (0, [11, 12], {}))
+
+
 class RunState(unittest.TestCase):
     def setUp(self):
         self.t = tempfile.mkdtemp()

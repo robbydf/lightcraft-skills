@@ -1,6 +1,6 @@
 ---
 name: lightcraft-mcp
-description: Use when the user asks to start/launch or stop/shut down LightCraft (the ArtCraft photo editor GUI, not headless) together with the LightCraft CLI MCP bridge, to connect or disconnect Claude Code from the LightCraft MCP server, or runs /lightcraft-mcp start or /lightcraft-mcp stop. Also when lightcraft-cli --connect or mcp__lightcraft__* tools fail because nothing is listening on 127.0.0.1:7980.
+description: Use when the user asks to start/launch or stop/shut down LightCraft (the ArtCraft photo editor GUI, not headless) together with the LightCraft CLI MCP bridge, to connect or disconnect Claude Code from the LightCraft MCP server, or runs /lightcraft-mcp start or /lightcraft-mcp stop. Also when lightcraft-cli --connect or mcp__lightcraft__* tools fail with "not reachable" because nothing is listening on 127.0.0.1:7980.
 ---
 
 # lightcraft-mcp
@@ -33,27 +33,43 @@ python "<base>/../../scripts/lightcraft-mcp.py" stop
 1. Starts the GUI with `--control 7980`, or reuses an instance already serving the port.
 2. Checks that the CLI can drive it (`lightcraft-cli run --connect … engine.commands`).
 3. Checks that the bridge answers an MCP `initialize` (`lightcraft-cli mcp --connect 127.0.0.1:7980`).
-4. Connects Claude Code if the server isn't registered yet:
-   `claude mcp add -s local lightcraft -- "<cli>" mcp --connect 127.0.0.1:7980`. Claude Code spawns
-   the bridge itself (stdio), so nothing is left running for it.
+4. Connects Claude Code if the server isn't registered yet, in **user scope** (every project):
+   `claude mcp add -s user lightcraft -- "<cli>" mcp --connect 127.0.0.1:7980`. Claude Code spawns
+   the bridge itself (stdio), so nothing is left running for it. A local-scope `lightcraft` entry in
+   the current folder is removed first, even a matching one, because it would shadow the user one.
 
 Options:
 - `-Library "<folder>"`: only when it starts a new GUI; the default is the last library.
-- `-Scope user`: register for every project instead of only the current folder.
+- `-Scope local`: register only for the current folder instead.
 - `-Port`, `-TimeoutSec`, `-LightCraftDir`, and `-TokenFile` (see Token).
 
-Success ends with `READY`. The `mcp__lightcraft__*` tools appear after Claude Code (re)connects. If
-they are missing in the current session, tell the user to start a new session.
+Success ends with `READY`.
+
+**The registration is meant to stay, with LightCraft open or not.** Tested November 2026 with nothing
+listening: the bridge starts in under a second and lists its tools. A tool call returns
+`LightCraft app at 127.0.0.1:7980 is not reachable … (start it with \`lightcraft --control PORT\`)`,
+and the bridge reconnects on every call. So:
+- Once registered, every session has the `mcp__lightcraft__*` tools (deferred: they load only when a
+  task needs them).
+- **A "not reachable" error means LightCraft is closed:** run `start` in the same session. The tools
+  work on the next call, with no new session needed.
+- Only when the tools are missing from a session altogether (registered after the session began) does
+  the user need a new session.
+- One session can drive LightCraft and PhotoCraft together when PhotoCraft's MCP is registered the same
+  way, so a hand-off needs no second session.
 
 ## stop
 
-1. Disconnects Claude Code: `claude mcp remove lightcraft` from the local and user scopes. A
-   project's own `.mcp.json` is left alone.
-2. Stops any running `lightcraft-cli … mcp` bridge processes.
-3. Closes the GUI gracefully (a window close, so the library saves) and waits up to `-TimeoutSec`.
+1. Closes the GUI gracefully (a window close, so the library saves) and waits up to `-TimeoutSec`.
+2. Leaves the registration and the running bridges alone. Killing a bridge would cut that session's
+   tools until it reconnects, and an idle bridge costs nothing.
 
 Success ends with `STOPPED`. `-Force` kills LightCraft if it won't close; use it only when the user
 says so.
+
+`stop -Disconnect` also disconnects Claude Code, only when the user asks for that: `claude mcp remove
+lightcraft` from the local and user scopes (a project's own `.mcp.json` is left alone), and it stops
+the `lightcraft-cli … mcp` bridge processes.
 
 ## Exit codes
 
@@ -64,7 +80,7 @@ says so.
 | 4 / 5 | start: the CLI or bridge handshake failed | Show the error line. |
 | 6 | start: `claude mcp add` failed, `claude` isn't on PATH, or a project `.mcp.json` registers `lightcraft` at another address | Show the error line. A local or user registration pointing elsewhere (another port, a moved install) is replaced automatically; a `.mcp.json` entry is the user's to change. |
 | 7 | stop: the GUI is still open (a dialog?) | Ask the user, and re-run `stop -Force` only on their yes. |
-| 8 | stop: the registration is still present | Usually a project's own `.mcp.json` entry, which stop deliberately keeps. Run `claude mcp get lightcraft` to see the scope, and remove it by hand only if the user wants. |
+| 8 | stop -Disconnect: the registration is still present | Usually a project's own `.mcp.json` entry, which stop deliberately keeps. Run `claude mcp get lightcraft` to see the scope, and remove it by hand only if the user wants. |
 | 9 | LightCraft not found | Ask for the install folder and save it as `LIGHTCRAFT_DIR=<folder>` in `~/.claude/lightcraft/config.env`. |
 
 ## Token

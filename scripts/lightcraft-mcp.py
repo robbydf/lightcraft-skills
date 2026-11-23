@@ -1,14 +1,18 @@
 """lightcraft-mcp: start / stop the LightCraft GUI + CLI MCP bridge and (dis)connect Claude Code.
 
-Usage: python lightcraft-mcp.py start|stop [-Port 7980] [-Library DIR] [-Scope local|user]
-                                [-TimeoutSec 60] [-Force] [-LightCraftDir DIR] [-TokenFile FILE]
+Usage: python lightcraft-mcp.py start|stop [-Port 7980] [-Library DIR] [-Scope user|local]
+                                [-TimeoutSec 60] [-Force] [-Disconnect] [-LightCraftDir DIR]
+                                [-TokenFile FILE]
+start registers the MCP server in user scope by default, and stop leaves it registered (its bridges
+reconnect when LightCraft runs again); stop -Disconnect also unregisters and stops the bridges.
 (python3 on macOS / Linux). The install folder comes from -LightCraftDir, else find_lightcraft.py
 (env LIGHTCRAFT_DIR, config.env, then the usual install places for this system). Standard library only.
 
 Exit codes: 2 LightCraft runs without the control port, 3 the port never opened, 4 the CLI can't
 drive the GUI, 5 the bridge handshake failed, 6 `claude mcp add` failed (or claude not found, or a
 project .mcp.json registers another address),
-7 stop: the GUI is still open, 8 stop: the registration is still there, 9 LightCraft not found.
+7 stop: the GUI is still open, 8 stop -Disconnect: the registration is still there,
+9 LightCraft not found.
 """
 import argparse
 import csv
@@ -256,13 +260,38 @@ def start(a, lcdir, cli, addr):
     if not claude:
         say("ERROR: the claude command is not on PATH, so the MCP server can't be registered")
         return 6
+    rc = register(a, claude, cli, addr)
+    if rc:
+        return rc
+    say(f"READY gui={addr} mcp={NAME}")
+    return 0
+
+
+def register(a, claude, cli, addr):
+    """Settle the Claude Code registration in a.Scope; 0, or 6 on failure.
+
+    The registration is meant to stay: the bridge starts without LightCraft, lists its tools, and
+    reconnects on each call, so the tools work in every session once the GUI runs.
+    """
     want_args = f"mcp --connect {addr}"
+
+    def right(reg):
+        return reg and same_path(reg[1], cli) and reg[2] == want_args
+
     # `claude mcp get` shows one entry (local over project over user); walk down the scopes.
-    for _ in range(4):
+    for _ in range(5):
         reg = registration(claude)
-        if reg and same_path(reg[1], cli) and reg[2] == want_args:
+        if reg and reg[0] == "local" and a.Scope == "user":
+            # A local entry would shadow the user one in this folder: move it up to user scope.
+            say(f"claude: removing the local-scope '{NAME}' in this folder, which would shadow the "
+                "user-scope one")
+            if run([claude, "mcp", "remove", NAME, "-s", "local"]).returncode != 0:
+                say(f"ERROR: could not remove the local '{NAME}' registration")
+                return 6
+            continue
+        if right(reg):
             say(f"claude: MCP server '{NAME}' already registered ({reg[0]} scope)")
-            break
+            return 0
         if reg and reg[0] not in ("local", "user"):
             say(f"ERROR: '{NAME}' is registered in the {reg[0]} scope (a project's .mcp.json?) as "
                 f"'{reg[1]} {reg[2]}', not '{cli} {want_args}'; fix that entry (only if the user wants)")
@@ -274,27 +303,21 @@ def start(a, lcdir, cli, addr):
             reg = None
         if not reg:
             run([claude, "mcp", "add", "-s", a.Scope, NAME, "--", cli, "mcp", "--connect", addr])
-            now = registration(claude)
-            if not (now and same_path(now[1], cli) and now[2] == want_args):
+            if not right(registration(claude)):
                 say("ERROR: 'claude mcp add' failed")
                 return 6
             say(f"claude: registered MCP server '{NAME}' ({a.Scope} scope) -> {cli} mcp --connect {addr}")
-            break
+            return 0
         say(f"claude: '{NAME}' pointed at '{reg[1]} {reg[2]}' ({reg[0]} scope); removing it")
         if run([claude, "mcp", "remove", NAME, "-s", reg[0]]).returncode != 0:
             say(f"ERROR: could not remove the old '{NAME}' registration ({reg[0]} scope)")
             return 6
-    else:
-        say(f"ERROR: could not settle the '{NAME}' registration (claude mcp get {NAME})")
-        return 6
-    say(f"READY gui={addr} mcp={NAME}")
-    return 0
+    say(f"ERROR: could not settle the '{NAME}' registration (claude mcp get {NAME})")
+    return 6
 
 
-def stop(a):
-    problems = 0
-    # 1. Disconnect Claude Code from the local and user scopes (never a project's .mcp.json)
-    claude = claude_cmd()
+def disconnect(claude):
+    """Remove the local and user registrations (never a project's .mcp.json); True if one is left."""
     removed = []
     if claude:
         for s in ("local", "user"):
@@ -308,14 +331,26 @@ def stop(a):
         say("claude: the claude command is not on PATH; registration not checked")
     if registered(claude):
         say(f"WARN: '{NAME}' still registered (claude mcp get {NAME})")
-        problems += 1
+        return True
+    return False
 
-    # 2. Stop bridge processes
-    bridges = bridge_pids()
-    for b in bridges:
-        kill(b)
-    say(f"bridge: stopped {len(bridges)} lightcraft-cli mcp process(es)" if bridges
-        else "bridge: no lightcraft-cli mcp process running")
+
+def stop(a):
+    problems = 0
+    # 1-2. Only with -Disconnect: unregister and stop the bridges. By default both stay: a bridge
+    # without LightCraft costs nothing and reconnects on its next call, and killing one cuts that
+    # session's tools until it reconnects.
+    if a.Disconnect:
+        if disconnect(claude_cmd()):
+            problems += 1
+        bridges = bridge_pids()
+        for b in bridges:
+            kill(b)
+        say(f"bridge: stopped {len(bridges)} lightcraft-cli mcp process(es)" if bridges
+            else "bridge: no lightcraft-cli mcp process running")
+    else:
+        say(f"claude: MCP server '{NAME}' stays registered and its bridges keep running "
+            "(stop -Disconnect removes them)")
 
     # 3. Close the GUI gracefully (lets it save the library); kill only with -Force
     pids = gui_pids()
@@ -350,13 +385,14 @@ def main(argv):
     ap.add_argument("action", choices=["start", "stop"], type=str.lower)
     ap.add_argument("-Port", type=int, default=7980)
     ap.add_argument("-Library", default="")
-    ap.add_argument("-Scope", choices=["local", "user"], default="local", type=str.lower)
+    ap.add_argument("-Scope", choices=["local", "user"], default="user", type=str.lower)
     ap.add_argument("-TimeoutSec", type=int, default=60)
     ap.add_argument("-Force", action="store_true")
+    ap.add_argument("-Disconnect", action="store_true")
     ap.add_argument("-LightCraftDir", default="")
     ap.add_argument("-TokenFile", default=os.environ.get("LIGHTCRAFT_TOKEN_FILE", ""))
     a = ap.parse_args(fix_argv(argv, ["-Port", "-Library", "-Scope", "-TimeoutSec", "-LightCraftDir", "-TokenFile"],
-                               ["-Force"]))
+                               ["-Force", "-Disconnect"]))
     lcdir = a.LightCraftDir or find()
     cli = os.path.join(lcdir, CLI_NAME) if lcdir else ""
     if not cli or not os.path.isfile(cli):

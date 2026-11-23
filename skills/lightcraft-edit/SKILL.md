@@ -404,6 +404,9 @@ nearby texture.
    - Figures overlapping the subject leave a trace.
    - Suggest a crop instead when it would remove them more cleanly.
    - For a removal the spot tool can't do cleanly, suggest handing the photo to PhotoCraft (next section).
+     PhotoCraft's `photocraft-remove-bystander` skill handles these: on 329 (_RDF4833, November 2026)
+     it removed a small man half hidden behind the subject's arm and a woman standing right against
+     her jacket, both clean at full view with the jacket edge untouched.
 
 ## Hand-off to PhotoCraft
 
@@ -414,9 +417,19 @@ the user's request for named photos, because each hand-off writes a large file a
 "$CLI" run --connect library.select 'ids=[ID]' photo.editInPhotoCraft
 ```
 
-It takes no parameters and acts on the selected photo. It needs the GUI (`--connect`). Tested on 531
-(_RDF5035.ARW, November 2026):
-- **It took 28 s.** If PhotoCraft wasn't running, it started it with the copy open.
+It takes no parameters and acts on the selected photo. It needs the GUI (`--connect`).
+
+**Before the hand-off, check that the photo has no copy yet:** `query_photos` with
+`{"text":"<name>"}` lists the raw and any `<name>-Edit.psd` copy. If a copy exists, reopen it instead
+(see "A second hand-off" below).
+
+Tested on 531 (_RDF5035.ARW) and 329 (_RDF4833.ARW), November 2026:
+- **It took 22–28 s.** If PhotoCraft wasn't running, it started it with the copy open.
+- **A sleeping external drive fails it fast:** on 329 the first try returned
+  `"error":"invalid parameters for \`photo.editExternal\`: E:\...\_RDF4833-Edit.psd: The device is not
+  ready. (os error 21)"` at once. It wrote no file and added no library photo. Once `Test-Path` on the
+  raw answered (the drive was awake), a second try worked. Unlike the duplicate failure below, this
+  one is safe to retry once, after checking that no `-Edit.psd` was written.
 - **It wrote `<name>-Edit.psd` next to the raw** (`E:\Photos\...\_RDF5035-Edit.psd`, 144 MB for a 24 MP
   raw): 16-bit RGB, one flat image, no layers, no compression. The LightCraft edits are rendered in. On
   531 the look and the 0.30 face lift matched LightCraft's own export: mean 68 against 66, average
@@ -432,7 +445,22 @@ It takes no parameters and acts on the selected photo. It needs the GUI (`--conn
 - **Later LightCraft edits to the original don't reach the PSD**, since it's a render. Finish the
   LightCraft edit first, then hand off.
 - **Edits made in PhotoCraft** belong to PhotoCraft's own tools or skill. This skill only does the
-  hand-off. Leave the PhotoCraft window to the user, or to a PhotoCraft skill if one is installed.
+  hand-off. Leave the PhotoCraft window to the user, or to a PhotoCraft skill if one is installed:
+  `photocraft-mcp` (start, round trip) and `photocraft-remove-bystander` (strangers).
+  - **Do the PhotoCraft step in this session** when the `mcp__photocraft__*` tools are here (both
+    MCP servers registered in user scope, see `lightcraft-mcp`): load the PhotoCraft skill and run
+    the round trip yourself. If they're missing, ask the user to run `/photocraft-mcp start` and open
+    a new session, rather than briefing another one.
+  - **When another session does the PhotoCraft work anyway,** send it the original and copy ids, the PSD
+    path, the user's own words, and where the person is, in normalized coordinates read from a
+    `render_photo` of the copy. "Sarah's left arm" is the viewer's right. Also tell it not to hand
+    the photo off again. The PhotoCraft skill backs up the PSD and runs the `photo.reload` itself;
+    ask it to say when it's done.
+  - **The hand-off's own PhotoCraft window can hold stale pixels.** The PhotoCraft skill edits in a
+    separate control PhotoCraft, so the window the hand-off opened still shows the old PSD. Tell the
+    user to close it without saving, or it would overwrite the edit.
+  - **Check the result in LightCraft:** `render_photo` the copy and the original at 1600 px and
+    compare the area.
 - **After PhotoCraft saves the PSD,** run `photo.reload ids=[COPY] wait=true` on the copy (under 0.5 s).
   LightCraft then shows the saved pixels: a red box painted in PhotoCraft showed up in the next export,
   and putting the old file back (with an older timestamp) and reloading brought back the original

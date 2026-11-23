@@ -6,7 +6,7 @@ renders, and asks you before anything that depends on your taste.
 
 | Skill | What it does |
 |---|---|
-| `lightcraft-mcp` | `start`: launch LightCraft with its control port, check the CLI and MCP bridge, and register the `lightcraft` MCP server with Claude Code. `stop`: disconnect and close LightCraft gracefully. |
+| `lightcraft-mcp` | `start`: launch LightCraft with its control port, check the CLI and MCP bridge, and register the `lightcraft` MCP server with Claude Code in user scope, where it stays: its tools are in every session and reconnect whenever LightCraft runs. `stop`: close LightCraft gracefully (`stop -Disconnect` also unregisters). |
 | `lightcraft-cull` | Cull a day or a whole library. The best frame of each burst and usable singles get picked, clear failures get the reject flag, and everything else stays unmarked. Big libraries run chunk by chunk in subagents, with an optional 3-reviewer panel for borderline frames. Every mark is logged and can be rolled back. |
 | `lightcraft-edit` | Edit only the photos you name: approved looks per scene type, measured subject lifts (through `lightcraft-face-lift`), local masks (signs, food, details), opt-in bystander removal, AI Denoise, straightening, and a hand-off to PhotoCraft (a rendered PSD copy) for pixel edits. The output is a review page plus phone-sized before/after images. |
 | `lightcraft-face-lift` | Lift the faces of your own people and pets with a SAM 3 or Auto Mask mask, measured against the background, and lessen a shadow across a face. `lightcraft-edit` calls it for its subject-lift step; you can also use it on its own ("brighten his face"). |
