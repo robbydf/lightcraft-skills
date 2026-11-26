@@ -1,6 +1,6 @@
 # Target: google-photos
 
-The default target of `lightcraft-export`. Photos go into a folder that **Google Drive for desktop**
+The default target of `lightcraft:export`. Photos go into a folder that **Google Drive for desktop**
 backs up to Google Photos. There is no Google Photos connector, and the skill never uploads or signs in.
 
 ## Settings

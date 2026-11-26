@@ -6,11 +6,11 @@ renders, and asks you before anything that depends on your taste.
 
 | Skill | What it does |
 |---|---|
-| `lightcraft-mcp` | `start`: launch LightCraft with its control port, check the CLI and MCP bridge, and register the `lightcraft` MCP server with Claude Code in user scope, where it stays: its tools are in every session and reconnect whenever LightCraft runs. `stop`: close LightCraft gracefully (`stop -Disconnect` also unregisters). |
-| `lightcraft-cull` | Cull a day or a whole library. The best frame of each burst and usable singles get picked, clear failures get the reject flag, and everything else stays unmarked. Big libraries run chunk by chunk in subagents, with an optional 3-reviewer panel for borderline frames. Every mark is logged and can be rolled back. |
-| `lightcraft-edit` | Edit only the photos you name: approved looks per scene type, measured subject lifts (through `lightcraft-face-lift`), local masks (signs, food, details), opt-in bystander removal, AI Denoise, straightening, and a hand-off to PhotoCraft (a rendered PSD copy) for pixel edits. The output is a review page plus phone-sized before/after images. |
-| `lightcraft-face-lift` | Lift the faces of your own people and pets with a SAM 3 or Auto Mask mask, measured against the background, and lessen a shadow across a face. `lightcraft-edit` calls it for its subject-lift step; you can also use it on its own ("brighten his face"). |
-| `lightcraft-export` | `/lightcraft-export [target] [trip]` (default target `google-photos`): export a trip's picks that show your own people (from LightCraft's face naming) at the target's settings into a folder the platform picks up. For Google Photos this is 16 MP sRGB JPEG with the date and GPS kept, into a folder Google Drive for desktop backs up. It is read-only on the catalog, never overwrites, and a manifest makes reruns skip what was already exported. |
+| `lightcraft:mcp` | `start`: launch LightCraft with its control port, check the CLI and MCP bridge, and register the `lightcraft` MCP server with Claude Code in user scope, where it stays: its tools are in every session and reconnect whenever LightCraft runs. `stop`: close LightCraft gracefully (`stop -Disconnect` also unregisters). |
+| `lightcraft:cull` | Cull a day or a whole library. The best frame of each burst and usable singles get picked, clear failures get the reject flag, and everything else stays unmarked. Big libraries run chunk by chunk in subagents, with an optional 3-reviewer panel for borderline frames. Every mark is logged and can be rolled back. |
+| `lightcraft:edit` | Edit only the photos you name: approved looks per scene type, measured subject lifts (through `lightcraft:face-lift`), local masks (signs, food, details), opt-in bystander removal, AI Denoise, straightening, and a hand-off to PhotoCraft (a rendered PSD copy) for pixel edits. The output is a review page plus phone-sized before/after images. |
+| `lightcraft:face-lift` | Lift the faces of your own people and pets with a SAM 3 or Auto Mask mask, measured against the background, and lessen a shadow across a face. `lightcraft:edit` calls it for its subject-lift step; you can also use it on its own ("brighten his face"). |
+| `lightcraft:export` | `/lightcraft:export [target] [trip]` (default target `google-photos`): export a trip's picks that show your own people (from LightCraft's face naming) at the target's settings into a folder the platform picks up. For Google Photos this is 16 MP sRGB JPEG with the date and GPS kept, into a folder Google Drive for desktop backs up. It is read-only on the catalog, never overwrites, and a manifest makes reruns skip what was already exported. |
 
 ## Install
 
@@ -25,7 +25,7 @@ Or add the marketplace first, then install from it:
 /plugin install lightcraft@lightcraft-skills
 ```
 
-Then, in Claude Code, run `/lightcraft:lightcraft-mcp start` (plugin skills are namespaced), or just
+Then, in Claude Code, run `/lightcraft:mcp start` (plugin skills are namespaced), or just
 ask Claude to start LightCraft. Copy `preferences.example.md` to `~/.claude/lightcraft/preferences.md`
 first, or let the skills do it on first use.
 
@@ -79,11 +79,11 @@ no-op on 0.21.1. It's kept for a future LightCraft that needs auth. Never commit
 ```
 .claude-plugin/plugin.json        plugin manifest
 .claude-plugin/marketplace.json   lets this repo be added as a marketplace
-skills/lightcraft-mcp/SKILL.md
-skills/lightcraft-cull/SKILL.md   plus panel-brief.md (the borderline panel's reviewer brief)
-skills/lightcraft-edit/SKILL.md
-skills/lightcraft-face-lift/SKILL.md (the subject lift, called by lightcraft-edit)
-skills/lightcraft-export/SKILL.md plus targets/<target>.md (one per platform: google-photos.md)
+skills/mcp/SKILL.md
+skills/cull/SKILL.md   plus panel-brief.md (the borderline panel's reviewer brief)
+skills/edit/SKILL.md
+skills/face-lift/SKILL.md (the subject lift, called by lightcraft:edit)
+skills/export/SKILL.md plus targets/<target>.md (one per platform: google-photos.md)
 scripts/
   lc-env.sh             sourced by every Bash call: sets CLI, LC_SCRIPTS, LC_PY, RUNS, PREFS, M, LCX
   find_lightcraft.py    install folder detection (Windows, macOS, Linux)
@@ -145,7 +145,7 @@ or export, and keep to these rules so nothing lands on the wrong photo:
 ## Known behaviour, LightCraft 0.21.1
 
 - A **minimized** window stops drawing, and every request then fails with "the app drew no frame".
-  Keep it visible. `lightcraft-mcp start` restores it.
+  Keep it visible. `lightcraft:mcp start` restores it.
 - A backslash in a CLI `path=` value breaks `run`: use forward slashes.
 - `geometry.upright mode=auto` is unreliable on busy scenes. `geometry.guides` switches the mode to
   guided.

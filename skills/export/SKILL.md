@@ -1,17 +1,17 @@
 ---
-name: lightcraft-export
-description: Use when the user asks to export, share, upload, back up or send finished LightCraft (ArtCraft) photos somewhere, e.g. "export the picks to Google Photos", "export the Japan trip", "send our photos to Google Photos", or runs /lightcraft-export [target] [trip].
+name: export
+description: Use when the user asks to export, share, upload, back up or send finished LightCraft (ArtCraft) photos somewhere, e.g. "export the picks to Google Photos", "export the Japan trip", "send our photos to Google Photos", or runs /lightcraft:export [target] [trip].
 ---
 
-# lightcraft-export
+# lightcraft:export
 
 Exports the **picks** of a trip (rating `export.min_rating`+, default 3) that show **the user's own
 people**, at the settings of one **target** (a platform or format), into a folder the target picks up.
 
-- **Read-only on the catalog.** The photos are already culled (`lightcraft-cull`) and edited
-  (`lightcraft-edit`). This skill never rates, flags, edits, denoises or names faces.
-- **Invocation:** `/lightcraft-export [target] [trip]`, for example `/lightcraft-export`,
-  `/lightcraft-export 2026-11 Japan` or `/lightcraft-export google-photos 2026-11 Japan`.
+- **Read-only on the catalog.** The photos are already culled (`lightcraft:cull`) and edited
+  (`lightcraft:edit`). This skill never rates, flags, edits, denoises or names faces.
+- **Invocation:** `/lightcraft:export [target] [trip]`, for example `/lightcraft:export`,
+  `/lightcraft:export 2026-11 Japan` or `/lightcraft:export google-photos 2026-11 Japan`.
   - **The target is optional; the default is `google-photos`.** The first word is the target only
     when it names a file in `targets/` (`targets/<word>.md`). Otherwise all the words are the trip.
   - **Unknown target:** if the user clearly named a target (said "target", or a word like `instagram`
@@ -24,7 +24,7 @@ people**, at the settings of one **target** (a platform or format), into a folde
 
 ## Setup
 
-- LightCraft must be running with the bridge (the `lightcraft-mcp` skill, `start`). Keep the window
+- LightCraft must be running with the bridge (the `lightcraft:mcp` skill, `start`). Keep the window
   **un-minimized**: a minimized window stops drawing, and every request fails with "the app drew no
   frame". On that error, restore the window, wait 10 s and run the same batch again (the manifest
   makes this safe).

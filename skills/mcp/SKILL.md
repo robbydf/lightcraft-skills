@@ -1,12 +1,12 @@
 ---
-name: lightcraft-mcp
-description: Use when the user asks to start/launch or stop/shut down LightCraft (the ArtCraft photo editor GUI, not headless) together with the LightCraft CLI MCP bridge, to connect or disconnect Claude Code from the LightCraft MCP server, or runs /lightcraft-mcp start or /lightcraft-mcp stop. Also when lightcraft-cli --connect or mcp__lightcraft__* tools fail with "not reachable" because nothing is listening on 127.0.0.1:7980.
+name: mcp
+description: Use when the user asks to start/launch or stop/shut down LightCraft (the ArtCraft photo editor GUI, not headless) together with the LightCraft CLI MCP bridge, to connect or disconnect Claude Code from the LightCraft MCP server, or runs /lightcraft:mcp start or /lightcraft:mcp stop. Also when lightcraft-cli --connect or mcp__lightcraft__* tools fail with "not reachable" because nothing is listening on 127.0.0.1:7980.
 ---
 
-# lightcraft-mcp
+# lightcraft:mcp
 
 Two subcommands, both handled by the plugin's script. The argument after the skill name picks one
-(`/lightcraft-mcp start`, `/lightcraft-mcp stop`; installed as a plugin, `/lightcraft:lightcraft-mcp start`).
+(`/lightcraft:mcp start`, `/lightcraft:mcp stop`).
 With no argument, ask which.
 
 The script is in the plugin's `scripts` folder, two levels above this skill's base directory
