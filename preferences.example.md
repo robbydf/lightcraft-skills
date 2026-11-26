@@ -65,7 +65,7 @@ for `mask.adjust`.
 
 ## Edit: subject lift (people, pets)
 
-- `lift.mask_if_darker_percent`: 5 (night only: mask only if the face is this much darker than the background; daylight uses a fixed 25 % margin, see lightcraft-face-lift)
+- `lift.mask_if_darker_percent`: 5 (night only: mask only if the face is this much darker than the background; daylight uses a fixed 25 % margin, see lightcraft:face-lift)
 - `lift.bright_face`: +15–25 % (daylight face already 60 or more; the mask stops at 0.50)
 - `lift.dark_face`: at least 75–80 % of the background mean (night)
 - `lift.daylight_dark_face`: about 75–85 % of the background mean, never above it; the mask cap below wins
@@ -103,7 +103,7 @@ for `mask.adjust`.
 ## Export
 
 Lookup order: `export.<target>.<key>`, then `export.<key>`, then the default shown. Targets live in
-`skills/lightcraft-export/targets/` (default target: `google-photos`).
+`skills/export/targets/` (default target: `google-photos`).
 
 - `export.min_rating`: 3 (picks at this rating and above)
 - `export.people`: the `people.own` names (a pick is exported when one of them is named on a face)

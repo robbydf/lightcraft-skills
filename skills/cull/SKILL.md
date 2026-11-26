@@ -1,19 +1,19 @@
 ---
-name: lightcraft-cull
+name: cull
 description: Use when the user asks to cull, pick, choose the best of, rate, reject or judge photos in LightCraft (ArtCraft), e.g. "pick the best from each burst", "cull the whole library", "go through yesterday's shots", "which ones should I keep".
 ---
 
-# lightcraft-cull
+# lightcraft:cull
 
 **Culling** gives each photo one of three outcomes: the best frame of each burst, or a usable single
 photo, gets 3 stars; an unusable photo gets the reject flag; everything else stays unmarked.
 
-**Editing** is not part of this skill: use the `lightcraft-edit` skill afterwards. It lists a run's picks
+**Editing** is not part of this skill: use the `lightcraft:edit` skill afterwards. It lists a run's picks
 with `runstate.py picks`.
 
 ## Setup
 
-- LightCraft must be running with the bridge (the `lightcraft-mcp` skill, `start`). The window must
+- LightCraft must be running with the bridge (the `lightcraft:mcp` skill, `start`). The window must
   stay **un-minimized** for the whole run: a minimized window stops drawing, and every request then
   fails with "the app drew no frame".
 - **Tell the user before the run** what they may do in LightCraft meanwhile (see "Using LightCraft
@@ -285,7 +285,7 @@ a time, and checks their results.
    has one active photo. Each chunk goes to a fresh `sonnet` subagent with this prompt:
    (`<SK>` is this skill's base directory, as an absolute path. Subagents aren't told it, so write it
    out in full.)
-   > You are a lightcraft-cull chunk worker. `<base>` in the skill is `<SK>`. Read `<SK>/SKILL.md` sections "Setup", "Rules" and "Cull
+   > You are a lightcraft:cull chunk worker. `<base>` in the skill is `<SK>`. Read `<SK>/SKILL.md` sections "Setup", "Rules" and "Cull
    > one group" and follow them exactly. RUN=`<RUN>`. Your groups (one per line) are in
    > `<SP>/chunkN.txt`. Your SP folder: SP=`<SP>/wN`. Cull every group, then return the short report.
 

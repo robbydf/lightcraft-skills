@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Export photos in small batches and move them safely into a watched folder (lightcraft-export).
+# Export photos in small batches and move them safely into a watched folder (lightcraft:export).
 #
 # Usage (from Bash, as a background tool call, after lc-env.sh):
 #   bash "$LC_SCRIPTS/export-stage.sh" RAWDIR DEST STAGING MANIFEST PICKS SIZE [APP_EXPORT_OPTS ...] -- ID ...

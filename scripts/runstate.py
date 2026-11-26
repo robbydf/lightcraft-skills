@@ -1,4 +1,4 @@
-"""Durable state for a lightcraft-cull run: baseline snapshot, per-group log, verification, rollback.
+"""Durable state for a lightcraft:cull run: baseline snapshot, per-group log, verification, rollback.
 
 RUN folder (outside the session scratchpad, survives sessions):
   $RUNS/<library-name>/   (RUNS from lc-env.sh)
@@ -22,7 +22,7 @@ Commands (photos.json = fresh `catalog.query limit=100000` output):
         compare ratings and flags of two catalog.query snapshots (no RUN needed): the edit skill's
         check that editing changed no mark; exit 1 if any differ
   python -I runstate.py summary  RUN                    counts per day, and the reject and unsure lists
-  python -I runstate.py picks    RUN [--day D]          the logged picks (for lightcraft-edit)
+  python -I runstate.py picks    RUN [--day D]          the logged picks (for lightcraft:edit)
   python -I runstate.py rollback RUN [--day D]          print the CLI commands that undo logged marks
 """
 import json

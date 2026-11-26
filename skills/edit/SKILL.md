@@ -1,22 +1,22 @@
 ---
-name: lightcraft-edit
+name: edit
 description: Use when the user asks to edit, develop, retouch or adjust photos in LightCraft (ArtCraft), e.g. "edit the picks from June 14", "brighten the person on the left", "the subject is too dark", "fix the exposure", "straighten this building", "denoise this", or "apply my night look".
 ---
 
-# lightcraft-edit
+# lightcraft:edit
 
 Edit only the photos the user names, or a scene type they approved for a batch. Picks come from a
-`lightcraft-cull` run, or from ids the user gives. Never rate, flag or reject here: that belongs to
-`lightcraft-cull`.
+`lightcraft:cull` run, or from ids the user gives. Never rate, flag or reject here: that belongs to
+`lightcraft:cull`.
 
 ## Setup
 
-- LightCraft must be running with the bridge: use the `lightcraft-mcp` skill (`start`). Keep the window
+- LightCraft must be running with the bridge: use the `lightcraft:mcp` skill (`start`). Keep the window
   un-minimized, or requests fail with "the app drew no frame".
 - **"lost the LightCraft app … control channel closed before a complete reply line"** twice in a row
   (a minute apart) means LightCraft has died, not that it is busy: in testing, a GPU driver reset
   stopped its window while an error box kept the process alive. Workers stop and report it. The
-  orchestrator tells the user and restarts it only on their yes (`lightcraft-mcp` `stop -Force`, then
+  orchestrator tells the user and restarts it only on their yes (`lightcraft:mcp` `stop -Force`, then
   `start`); edits made before the crash were kept. Then re-read each open photo with `develop.get`.
 - Run CLI commands **from Bash**: Windows PowerShell 5.1 strips the `"` inside JSON arguments.
   Variables don't persist between calls, so start every Bash call with:
@@ -206,7 +206,7 @@ same name can be read back stale.
 3. **Look**, by scene type (see Looks). A photo whose scene type has no approved look gets **nothing**
    (no look and no mask) until the user approves the sample, unless the user asked for a trial batch
    (see Looks).
-4. **Subject lift** for the user's own people and pets: run `lightcraft-face-lift` (see Subject
+4. **Subject lift** for the user's own people and pets: run `lightcraft:face-lift` (see Subject
    lift); its "When to lift" table decides, and it lifts some faces that aren't darker than the
    background (bright daylight faces, a shadow across a face). Then any **local fixes** (see Local
    masks: signs, food, details).
@@ -333,12 +333,12 @@ than the background (Subject lift).
 
 ## Subject lift (people, pets)
 
-The lift has its own skill, **`lightcraft-face-lift`**. It covers whether a face needs a lift and
+The lift has its own skill, **`lightcraft:face-lift`**. It covers whether a face needs a lift and
 how to measure it, a shadow across a face, the SAM 3 and Auto Mask paths, the mask values and
 ladders, and the edge checks.
-- **Main session:** invoke it with the Skill tool (`lightcraft:lightcraft-face-lift` when installed
-  as a plugin, else `lightcraft-face-lift`).
-- **Batch worker, or no Skill tool:** Read `<base>/../lightcraft-face-lift/SKILL.md`, where `<base>`
+- **Main session:** invoke it with the Skill tool (`lightcraft:face-lift`; a copy used
+  without the plugin is `face-lift`).
+- **Batch worker, or no Skill tool:** Read `<base>/../face-lift/SKILL.md`, where `<base>`
   is this skill's base directory. Name that file in every worker brief.
 - The setup, history record and look from this skill carry over. Afterwards come back here for local
   fixes, denoise, the clipping check and the after render.
@@ -346,7 +346,7 @@ ladders, and the edge checks.
 ## Local masks: signs, food, details
 
 These came from user requests in testing. Do them only when the user asks, or when the condition below is
-clearly met. Make the mask as in Path A of `lightcraft-face-lift`, check coverage with the magenta
+clearly met. Make the mask as in Path A of `lightcraft:face-lift`, check coverage with the magenta
 overlay, then set the values.
 
 - **A bright sign or billboard competing with the people:** darken the sign a little **and** lift the
@@ -404,7 +404,7 @@ nearby texture.
    - Figures overlapping the subject leave a trace.
    - Suggest a crop instead when it would remove them more cleanly.
    - For a removal the spot tool can't do cleanly, suggest handing the photo to PhotoCraft (next section).
-     PhotoCraft's `photocraft-remove-bystander` skill handles these: on 329 (_RDF4833, November 2026)
+     PhotoCraft's `photocraft:remove-bystander` skill handles these: on 329 (_RDF4833, November 2026)
      it removed a small man half hidden behind the subject's arm and a woman standing right against
      her jacket, both clean at full view with the jacket edge untouched.
 
@@ -446,10 +446,10 @@ Tested on 531 (_RDF5035.ARW) and 329 (_RDF4833.ARW), November 2026:
   LightCraft edit first, then hand off.
 - **Edits made in PhotoCraft** belong to PhotoCraft's own tools or skill. This skill only does the
   hand-off. Leave the PhotoCraft window to the user, or to a PhotoCraft skill if one is installed:
-  `photocraft-mcp` (start, round trip) and `photocraft-remove-bystander` (strangers).
+  `photocraft:mcp` (start, round trip) and `photocraft:remove-bystander` (strangers).
   - **Do the PhotoCraft step in this session** when the `mcp__photocraft__*` tools are here (both
-    MCP servers registered in user scope, see `lightcraft-mcp`): load the PhotoCraft skill and run
-    the round trip yourself. If they're missing, ask the user to run `/photocraft-mcp start` and open
+    MCP servers registered in user scope, see `lightcraft:mcp`): load the PhotoCraft skill and run
+    the round trip yourself. If they're missing, ask the user to run `/photocraft:mcp start` and open
     a new session, rather than briefing another one.
   - **When another session does the PhotoCraft work anyway,** send it the original and copy ids, the PSD
     path, the user's own words, and where the person is, in normalized coordinates read from a
@@ -733,12 +733,12 @@ Subagents aren't told the skill's base directory, so list in the brief:
   new round tag;
 - which looks are approved, and whether this is a trial batch for proposed looks; the venue-table
   lines for its ids and the preset id of each look; the day's people list (always, even when
-  recognition is usable) and whether recognition is usable (see lightcraft-cull, "Whose faces count");
+  recognition is usable) and whether recognition is usable (see lightcraft:cull, "Whose faces count");
   when it is, the `people-by-photo.json` lines for its ids (`people.py "$RUN" --ids 1165-1197`), so
   the worker makes no face calls of its own;
 - that the report ends with **"Improvements"**: at most 6 lines on what would make the skill faster,
   use fewer tokens, or give better results. The orchestrator collects them for the next skill update;
-- the path of `lightcraft-face-lift/SKILL.md` (the lift step; workers Read it, see Subject lift);
+- the path of `lightcraft:face-lift/SKILL.md` (the lift step; workers Read it, see Subject lift);
 - the review material and `review.jsonl` (see Showing results);
 - the report: at most 15–25 lines, with no images;
 - that the worker never uses `edit.undo`/`edit.redo` (global, not per photo; take steps back with
@@ -782,7 +782,7 @@ chunk must stop:
   - A mask on a photo with `look.night` or `look.light_show` follows the night ladder: shadows up to
     `lift.shadows_max`, and exposure up to `lift.mask_limit`. Don't flag it as over the daylight cap.
   - The face lift picks its ladder by the **scene**, not the look. A photo whose report notes "look is
-    X, scene is Y" is checked by hand against the scene's ladder (see lightcraft-face-lift, Mask
+    X, scene is Y" is checked by hand against the scene's ladder (see lightcraft:face-lift, Mask
     values); a looks.py FAIL or pass on it doesn't count.
   - **Take the ids from the list you gave the worker,** written to a file when you launch it. In
     testing, a check read an older chunk file after the day was re-split and scanned the wrong ids.
@@ -912,5 +912,5 @@ Never claim a photo is brighter, cleaner or straight without a measurement.
   render.
 - **`mask.add` and `mask.addComponent` can stay `pending` for minutes,** and a single CLI call can run
   past 180 s. Poll `"$CLI" run --connect develop.get id=ID | python -I "$LC_SCRIPTS/lcjson.py" seg NAME` until
-  READY equals PARTS (`kind=subject` masks never get `seg` data; see lightcraft-face-lift). Never TaskStop a running mask
+  READY equals PARTS (`kind=subject` masks never get `seg` data; see lightcraft:face-lift). Never TaskStop a running mask
   command: one stopped call later reset a mask to +3.

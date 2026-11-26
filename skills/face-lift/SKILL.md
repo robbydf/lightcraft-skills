@@ -1,21 +1,21 @@
 ---
-name: lightcraft-face-lift
-description: Use when a person's or pet's face in a LightCraft (ArtCraft) photo needs lifting or a shadow on it lessened, e.g. "brighten his face", "the face is too dark", "lessen the shadow on her face", "lift the kids". lightcraft-edit also calls it for its subject-lift step.
+name: face-lift
+description: Use when a person's or pet's face in a LightCraft (ArtCraft) photo needs lifting or a shadow on it lessened, e.g. "brighten his face", "the face is too dark", "lessen the shadow on her face", "lift the kids". lightcraft:edit also calls it for its subject-lift step.
 ---
 
-# lightcraft-face-lift
+# lightcraft:face-lift
 
 Lift the faces of the user's own people (and pets) with a mask, and lessen a shadow across a face.
-This is the subject-lift step of `lightcraft-edit`, kept as its own skill.
+This is the subject-lift step of `lightcraft:edit`, kept as its own skill.
 
 ## Setup
 
-- **Called from lightcraft-edit:** its Setup, history record ("Before the first change to a photo")
+- **Called from lightcraft:edit:** its Setup, history record ("Before the first change to a photo")
   and look are already done. Keep the same `RUN`, `SP` and round. When the lift is finished, go back
-  to lightcraft-edit for local fixes, denoise, the clipping check and the after render.
-- **Used on its own** (the user asks only for a face lift): first follow lightcraft-edit's **Setup**
+  to lightcraft:edit for local fixes, denoise, the clipping check and the after render.
+- **Used on its own** (the user asks only for a face lift): first follow lightcraft:edit's **Setup**
   and **Before the first change to a photo**, including how to revert (Read
-  `<base>/../lightcraft-edit/SKILL.md`). Its Setup line works from here unchanged:
+  `<base>/../edit/SKILL.md`). Its Setup line works from here unchanged:
   `source "<base>/../../scripts/lc-env.sh"`, with `<base>` being this skill's base directory.
   Don't apply a look unless the user asks; measure on the photo as it is. Where this skill says
   "look applied, no mask", read "as it is, no lift mask".
@@ -44,13 +44,13 @@ This is the subject-lift step of `lightcraft-edit`, kept as its own skill.
 - **A photo the user edited by hand, with no look** (their own exposure, highlights, denoise or hand
   mask; in a batch run): leave it untouched and report it. A look would overwrite their values, and a
   second noise reduction would stack on theirs.
-- **Order in a batch:** the look first, then the global `exposure.boost` decision (lightcraft-edit,
+- **Order in a batch:** the look first, then the global `exposure.boost` decision (lightcraft:edit,
   Global exposure boosts), and only then the no-mask render and the ladder. The boost changes every
   face number, so deciding it after the ladder means redoing both (one chunk redid 10 photos).
 - Names in `backticks` such as `lift.mask.daylight` are keys in the preferences file (`$PREFS`).
-  `M`, `LCX`, `$CLI` and the helpers are described in lightcraft-edit's Setup.
+  `M`, `LCX`, `$CLI` and the helpers are described in lightcraft:edit's Setup.
 - Every CLI call starts with `library.select 'ids=[ID]'`. Never use `edit.undo` or `edit.redo`; take
-  a step back with `history.restore` (lightcraft-edit, Revert).
+  a step back with `history.restore` (lightcraft:edit, Revert).
 
 ## When to lift
 
@@ -69,7 +69,7 @@ The first rule that fits wins:
 | night | within 5 %, or brighter | no mask |
 
 - Only the user's own people get a lift. Strangers in a crowd or street scene are part of the scene,
-  so no mask (see lightcraft-cull, "Whose faces count").
+  so no mask (see lightcraft:cull, "Whose faces count").
 - The "60 or more" rows are for daylight only. A night face takes the shadow row first, then only
   the 5 % gate (in testing a night face of 125 against a background of 68 had no clear answer under
   the old wording).
@@ -172,12 +172,12 @@ bright sky behind; the user's edit of 2026-11-19, adopted here 2026-11-22):
 1. A subject mask on the person (Path A or B below) at `lift.mask.face_shadow` (default
    `{"exposure":0.45,"shadows":15,"temp":0}`).
 2. **Plus a global `light.exposure` +0.25** on the whole photo (`lift.face_shadow_global`). This
-   counts as the photo's one `exposure.boost` (lightcraft-edit, Global exposure boosts): don't add
+   counts as the photo's one `exposure.boost` (lightcraft:edit, Global exposure boosts): don't add
    another. If the photo already carries a global boost, the mask alone does it.
    - **Blown gate:** keep the global only if the whole frame's blown % rises by less than 0.5 points
      and no face box has more than 2 % blown. Otherwise set it back and keep the mask alone at 0.45.
      At night, measure the frame's blown % with `-Region` boxes that leave out signs and lamps, as in
-     lightcraft-edit's Global exposure boosts.
+     lightcraft:edit's Global exposure boosts.
      In hard sun (three people, one face half in shade) the global took the frame from 0.17 to
      2.85 % blown and a forehead to 21 %; mask alone gave 1.49 %, and the user kept that, even with
      one face at 7 % blown. Report the blown % of each face box; don't lower the mask for it.
@@ -221,7 +221,7 @@ Measure on a render with the look applied and no mask. Report each box's region.
   shadowed eye sockets, glasses and specular highlights. Read the box off an `M grid` of the face,
   never a guess from the 1000 px view.
   - **Faster: start from LightCraft's face rectangle** when the cull saved one
-    (`$RUN/faces-<Name>.json` from lightcraft-cull's people step; `result.confirmed[]` entries whose
+    (`$RUN/faces-<Name>.json` from lightcraft:cull's people step; `result.confirmed[]` entries whose
     `photo` is the id, `rect` in full-frame fractions x0,x1,y0,y1). Use **x0+0.15w to x1−0.15w and
     y0+0.38h to y0+0.70h** as the face box, then check it on the image as below. In the all-photos run
     this replaced the slowest step, finding faces by eye. A lower band (0.42–0.78) landed on nose and
@@ -266,7 +266,7 @@ Measure on a render with the look applied and no mask. Report each box's region.
   - **One box in range and one under 50** (at night): take the in-range box plus the next-brightest
     ordinary surface, and say so.
 - **Strangers get no mask (speed and intent).** Only the user's own people are subjects (see
-  lightcraft-cull, "Whose faces count": recognised names when face recognition is on and faces are
+  lightcraft:cull, "Whose faces count": recognised names when face recognition is on and faces are
   named, else the day's people list by clothing). Don't
   measure or mask strangers, crowds, staff or performers. Report "no own people in frame: scene" and
   move on.
@@ -349,7 +349,7 @@ Both paths: `mask.adjust id=N 'values={...}'`
   - In testing, 0.7 brought one face from 64 to 70.5 (77 % of the background) with a clean edge, and
     0.85 showed no halos on two others.
 - **Face far darker than the background at the limit:** add the global `exposure.boost` (see
-  "Global exposure boosts" in lightcraft-edit's Looks) and report the gap.
+  "Global exposure boosts" in lightcraft:edit's Looks) and report the gap.
 - **Flat, veiled face:** the trigger is an overcast scene where the face looks grey and low-contrast
   at 100 % after the lift. Set mask `shadows` to 0 and add `"dehaze":10,"clarity":10` (both are
   valid mask settings) instead of more exposure. The mask's shadow lift causes the veil, and clarity plus contrast alone
@@ -492,7 +492,7 @@ Centre each 100 % crop on the mask boundary against a mid or bright
 background, with at least 30 % of the crop being background. Crops placed inside the subject showed no
 halo in testing even when there was one.
 - **Check at true 100 %, not on a 2000 px render,** for the strongest mask in each batch and for any
-  mask with exposure above 0.6: export that photo at `longEdge=6000` (4000 while GPU rendering is on, see lightcraft-edit's Setup; one per call), and centre the
+  mask with exposure above 0.6: export that photo at `longEdge=6000` (4000 while GPU rendering is on, see lightcraft:edit's Setup; one per call), and centre the
   crop where dark hair meets a dark background (foliage, shade). That edge is where halos show first.
   In testing, 2000 px edge crops passed five portraits whose halo the user saw on the review page.
 
@@ -501,5 +501,5 @@ halo in testing even when there was one.
 For each photo: the mask path and its final values, any global exposure added and why, the face and
 background boxes with their means, the lift %, and for a shadowed face the lit and shadow boxes with
 the shadow / lit ratio before → after. Name the limit that stopped a ladder. Never claim a face is
-brighter without a measurement. Called from lightcraft-edit, these lines go into its report and
+brighter without a measurement. Called from lightcraft:edit, these lines go into its report and
 `review.jsonl` `changes`.
