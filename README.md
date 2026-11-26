@@ -19,8 +19,7 @@ renders, and asks you before anything that depends on your taste.
 /plugin install lightcraft@robbydf-plugins
 ```
 
-`robbydf/claude-plugins` is the one marketplace for all of my plugins. This repo's own marketplace
-(`/plugin marketplace add robbydf/lightcraft-skills`) still works too.
+`robbydf/claude-plugins` is the one marketplace for all of my plugins.
 
 Then, in Claude Code, run `/lightcraft:mcp start` (plugin skills are namespaced), or just
 ask Claude to start LightCraft. Copy `preferences.example.md` to `~/.claude/lightcraft/preferences.md`
@@ -75,7 +74,6 @@ no-op on 0.21.1. It's kept for a future LightCraft that needs auth. Never commit
 
 ```
 .claude-plugin/plugin.json        plugin manifest
-.claude-plugin/marketplace.json   lets this repo be added as a marketplace
 skills/mcp/SKILL.md
 skills/cull/SKILL.md   plus panel-brief.md (the borderline panel's reviewer brief)
 skills/edit/SKILL.md
