@@ -15,15 +15,12 @@ renders, and asks you before anything that depends on your taste.
 ## Install
 
 ```
-/plugin install lightcraft --marketplace robbydf/lightcraft-skills
+/plugin marketplace add robbydf/claude-plugins
+/plugin install lightcraft@robbydf-plugins
 ```
 
-Or add the marketplace first, then install from it:
-
-```
-/plugin marketplace add robbydf/lightcraft-skills
-/plugin install lightcraft@lightcraft-skills
-```
+`robbydf/claude-plugins` is the one marketplace for all of my plugins. This repo's own marketplace
+(`/plugin marketplace add robbydf/lightcraft-skills`) still works too.
 
 Then, in Claude Code, run `/lightcraft:mcp start` (plugin skills are namespaced), or just
 ask Claude to start LightCraft. Copy `preferences.example.md` to `~/.claude/lightcraft/preferences.md`
